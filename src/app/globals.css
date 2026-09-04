@@ -1,0 +1,421 @@
+@import "tailwindcss";
+
+/*
+ * Tokens de diseño. Sin tailwind.config.js (Tailwind v4 usa @theme inline).
+ * Paleta verde (RedPecuaria = red pecuaria/agro) — cambiar acá si la marca
+ * define otro color, no hace falta tocar ningún componente.
+ */
+:root {
+  --primary: #2f9e44;
+  --primary-hover: #268a3a;
+  --primary-light: #e6f4ea;
+
+  /* Botones "Cancelar"/secundarios — gris, mismo peso visual que --primary
+     pero sin competir con él (ver ARCHITECTURE.md §2, botones estandarizados). */
+  --secondary: #6b7280;
+
+  --background: #ffffff;
+  --foreground: #0f172a;
+
+  --border-subtle: #f3f4f6;
+  --border-input: #e5e7eb;
+  --bg-input: #f9fafb;
+  --bg-hover: #f3f4f6;
+  --bg-card: #ffffff;
+  --bg-page: #f9fafb;
+  /* Filas intercaladas de tabla — más marcada que `--bg-page` (si no, casi
+     no se distingue del blanco de `--bg-card`) pero más clara que
+     `--bg-hover`, para que pasar el mouse siga notándose incluso en una
+     fila par. */
+  --bg-stripe: #f5f6f8;
+
+  --text-muted: #6b7280;
+  --text-secondary: #4b5563;
+  --text-placeholder: #9ca3af;
+
+  --danger: #dc2626;
+  --danger-hover: #b91c1c;
+  --danger-light: #fee2e2;
+
+  /* Severidad intermedia para alertas (ej. "días de alerta" en tablas) —
+     danger (rojo, lo más urgente), warning (naranja), caution (amarillo). */
+  --warning: #ea580c;
+  --warning-light: #ffedd5;
+  --caution: #ca8a04;
+  --caution-light: #fef9c3;
+}
+
+.dark {
+  --primary: #3fb855;
+  --primary-hover: #34a048;
+  --primary-light: #163821;
+
+  --secondary: #64748b;
+
+  --background: #0f172a;
+  --foreground: #e2e8f0;
+
+  --border-subtle: #1e293b;
+  --border-input: #334155;
+  --bg-input: #1e293b;
+  --bg-hover: #1e293b;
+  --bg-card: #0f172a;
+  --bg-page: #020617;
+  --bg-stripe: #161f33;
+
+  --text-muted: #94a3b8;
+  --text-secondary: #cbd5e1;
+  --text-placeholder: #64748b;
+
+  --danger: #f87171;
+  --danger-hover: #ef4444;
+  --danger-light: rgba(248, 113, 113, 0.15);
+
+  --warning: #fb923c;
+  --warning-light: rgba(251, 146, 60, 0.15);
+  --caution: #facc15;
+  --caution-light: rgba(250, 204, 21, 0.15);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --font-sans: var(--font-app);
+}
+
+/*
+ * Páginas de auth (login) siempre en tema claro, independiente del toggle
+ * global. Redefinir las variables NO alcanza: si el <html> tiene `.dark`,
+ * `body` ya heredó un `color` gris claro (pensado para fondo oscuro) antes
+ * de llegar acá — hay que reaplicar `color`/`background` explícitamente en
+ * este punto del árbol, no solo la variable, para cortar esa herencia.
+ */
+.page-auth {
+  --primary: #2f9e44;
+  --primary-hover: #268a3a;
+  --primary-light: #e6f4ea;
+
+  --secondary: #6b7280;
+
+  --background: #ffffff;
+  --foreground: #0f172a;
+
+  --border-subtle: #f3f4f6;
+  --border-input: #e5e7eb;
+  --bg-input: #f9fafb;
+  --bg-hover: #f3f4f6;
+  --bg-card: #ffffff;
+  --bg-page: #f9fafb;
+
+  --text-muted: #6b7280;
+  --text-secondary: #4b5563;
+  --text-placeholder: #9ca3af;
+
+  --danger: #dc2626;
+  --danger-hover: #b91c1c;
+
+  color: var(--foreground);
+  /* Literal, no var(--bg-page): el fondo de las páginas de auth es fijo
+     (slate-100, igual al proyecto de referencia) e independiente del fondo
+     general de la app, que sí puede cambiar de tono en el futuro. */
+  background: #f1f5f9;
+  color-scheme: light;
+}
+
+body {
+  background: var(--bg-page);
+  color: var(--foreground);
+}
+
+/*
+ * Diseño de esquinas cuadradas (sin bordes redondeados) — rasgo visual
+ * deliberado del sistema. Solo `.circle` (avatares, badges) queda redondo.
+ */
+*,
+*::before,
+*::after {
+  border-radius: 0 !important;
+}
+.circle {
+  border-radius: 9999px !important;
+}
+
+@layer components {
+  /* Tarjeta de contenido genérica (dashboard, futuras pantallas) — borde +
+     fondo + sombra sutil, ya theme-aware vía variables. */
+  .card {
+    @apply border shadow-sm;
+    background: var(--bg-card);
+    border-color: var(--border-subtle);
+  }
+
+  /* Tipografía semántica — evita repetir combinaciones de clases Tailwind. */
+  .tipo-titulo-app {
+    @apply text-base font-medium;
+  }
+  .tipo-titulo-card {
+    font-size: 2rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+  .tipo-titulo-seccion {
+    @apply text-lg font-semibold;
+  }
+  .tipo-normal {
+    @apply text-sm;
+    color: var(--foreground);
+  }
+  .tipo-secundario {
+    @apply text-sm font-normal;
+    color: var(--foreground);
+  }
+  .tipo-muted {
+    @apply text-xs;
+    color: var(--text-muted);
+  }
+  .tipo-label {
+    @apply text-sm font-medium mb-1 block;
+  }
+  .tipo-input {
+    @apply text-sm;
+  }
+  .tipo-error {
+    @apply text-xs mt-1;
+    color: var(--danger);
+  }
+  .tipo-link {
+    color: var(--primary);
+    @apply hover:underline;
+  }
+
+  /* Toolbar de listados (buscador + botón "Nuevo") */
+  .page-toolbar {
+    @apply flex items-center justify-between gap-3 flex-wrap px-5 py-4 border-b;
+    border-color: var(--border-subtle);
+  }
+  .toolbar-search {
+    @apply relative flex-1 min-w-[200px] max-w-sm;
+  }
+  .toolbar-search-input {
+    @apply w-full border pl-9 pr-3 py-2 text-sm outline-none;
+    height: 2.375rem;
+    background: var(--bg-input);
+    border-color: var(--border-input);
+  }
+  /* `height` explícita (no solo padding) en este par y en el de .form-input
+     más abajo — para que el alto no dependa de que el cálculo de
+     padding+borde+line-height de cada uno dé la misma cuenta, sino que sea
+     literalmente el mismo número fijo en los dos. */
+  .toolbar-btn-primary {
+    @apply inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white border border-transparent transition-colors;
+    height: 2.375rem;
+    background: var(--primary);
+  }
+  .toolbar-btn-primary:hover {
+    background: var(--primary-hover);
+  }
+
+  /* Formularios / diálogos */
+  .form-input {
+    @apply w-full border px-4 py-2.5 text-sm outline-none transition-all;
+    height: 2.625rem;
+    background: var(--bg-card);
+    border-color: var(--border-input);
+  }
+  .form-input::placeholder {
+    color: var(--text-placeholder);
+  }
+  .form-input:disabled {
+    @apply cursor-not-allowed opacity-60;
+    background: var(--bg-input);
+  }
+  /* Un <select> no tiene `::placeholder` real — `Select` (components/ui)
+     simula uno con una opción vacía `disabled hidden` + `required`, y este
+     selector la pinta del mismo gris mientras siga sin elegirse un valor
+     real (`:invalid` deja de aplicar apenas se elige cualquier opción). */
+  select.form-input:required:invalid {
+    color: var(--text-placeholder);
+  }
+  .form-input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 15%, transparent);
+  }
+  .form-input-error {
+    border-color: var(--danger);
+  }
+  .form-input-error:focus {
+    border-color: var(--danger);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 15%, transparent);
+  }
+
+  /* Botón primario de acción (formularios) — distinto de .toolbar-btn-primary
+     (ese es más chico, pensado para la barra de listados). El
+     `border-transparent` no se ve, pero suma los mismos 2px de caja que ya
+     suma el `border` de `.form-input` — sin esto el botón queda 2px más
+     bajo que el input y no se alinean en la misma fila/diálogo. */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold text-white border border-transparent transition-all;
+    height: 2.625rem;
+    background: var(--primary);
+  }
+  .btn-primary:hover:not(:disabled) {
+    opacity: 0.9;
+  }
+  .btn-primary:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+  .btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  /* Botón secundario/cancelar — mismo tamaño y forma que .btn-primary, para
+     que ambos se lean como un mismo sistema de botones y solo cambie el
+     color. Aceptar/Guardar/Confirmar → .btn-primary (verde). Cancelar →
+     .btn-secondary (gris). */
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold text-white border border-transparent transition-all;
+    height: 2.625rem;
+    background: var(--secondary);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    opacity: 0.9;
+  }
+  .btn-secondary:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+  .btn-secondary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  /* TopBar: botones de ícono (hamburguesa, buscar, notificaciones) y el
+     menú desplegable del usuario. Clases dedicadas porque un estilo inline
+     no puede tener `:hover` — antes usábamos `hover:opacity-*` de Tailwind
+     como atajo, pero eso es un efecto distinto al de la referencia
+     (que cambia el fondo, no la opacidad). */
+  .topbar-icon-btn {
+    @apply p-2 transition-colors cursor-pointer;
+    color: var(--text-secondary);
+  }
+  .topbar-icon-btn:hover {
+    background: var(--bg-hover);
+  }
+  .topbar-user-trigger {
+    @apply flex items-center gap-2.5 px-2 py-1.5 transition-colors cursor-pointer;
+  }
+  .topbar-user-trigger:hover {
+    background: var(--bg-hover);
+  }
+  .topbar-menu-item {
+    @apply flex w-full items-center gap-3 px-3 py-2.5 transition-colors cursor-pointer;
+    color: var(--text-secondary);
+  }
+  .topbar-menu-item:hover {
+    background: var(--bg-hover);
+  }
+  .topbar-menu-item-danger {
+    @apply flex w-full items-center gap-3 px-3 py-2.5 transition-colors cursor-pointer;
+    color: var(--danger);
+  }
+  .topbar-menu-item-danger:hover {
+    background: var(--danger-light);
+  }
+
+  /* Sidebar: ítem del menú (hoja o el botón de un padre con hijos). Igual
+     que el TopBar, clases dedicadas para poder tener `:hover` de verdad. */
+  .sidebar-item {
+    @apply relative flex items-center gap-3 py-3 pr-3 text-sm transition-colors;
+    color: var(--text-muted);
+  }
+  .sidebar-item:hover {
+    background: var(--bg-hover);
+    color: var(--foreground);
+  }
+  .sidebar-item-active {
+    @apply relative flex items-center gap-3 py-3 pr-3 text-sm font-medium;
+    background: var(--bg-hover);
+    color: var(--foreground);
+  }
+
+  .dialog-overlay {
+    @apply fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4;
+  }
+  .dialog-panel {
+    @apply w-full max-w-md p-6 border;
+    background: var(--bg-card);
+    border-color: var(--border-subtle);
+  }
+  /* El espaciado entre el bloque de título/subtítulo, el campo y el footer
+   * lo da un solo `gap` en el contenedor flex que los envuelve (ver
+   * company-dialog.tsx) — antes cada bloque tenía su propio margen
+   * (mb-8/mb-4/mt-6) y no coincidían entre sí. */
+  .dialog-footer {
+    @apply flex justify-end gap-2;
+  }
+  /* Cancelar/Confirmar del mismo ancho — sin esto "Cancelar" y "Guardar"/
+     "Eliminar" quedan cada uno del ancho de su propio texto, y no se leen
+     como un mismo par de acciones. */
+  .dialog-footer .btn-primary,
+  .dialog-footer .btn-secondary {
+    @apply min-w-28;
+  }
+
+  /* Envoltorio obligatorio de cualquier `.data-table` — sin esto, en una
+     pantalla angosta las columnas se salen del `.card` en vez de generar su
+     propio scroll horizontal (el contenido no debe desbordar la página, ver
+     ARCHITECTURE.md). */
+  .data-table-wrapper {
+    @apply overflow-x-auto;
+  }
+  /* Tabla de datos genérica */
+  .data-table {
+    @apply w-full text-sm;
+    min-width: 40rem;
+  }
+  .data-table thead {
+    @apply text-left;
+  }
+  .data-table th {
+    @apply px-4 py-3.5 font-semibold whitespace-nowrap border-b;
+    border-color: var(--border-subtle);
+  }
+  .data-table th:first-child {
+    @apply pl-6;
+  }
+  .data-table tbody tr {
+    @apply transition-colors;
+    border-color: var(--border-subtle);
+  }
+  /* Filas intercaladas — declarado antes que `:hover` (misma especificidad,
+     así que el orden en el archivo decide) para que el hover siga ganando
+     tanto en filas pares como impares. */
+  .data-table tbody tr:nth-child(even) {
+    background: var(--bg-stripe);
+  }
+  .data-table tbody tr:hover {
+    background: var(--bg-hover);
+  }
+  .data-table td {
+    @apply px-4 py-4 border-b;
+    border-color: var(--border-subtle);
+  }
+  .data-table td:first-child {
+    @apply pl-6;
+  }
+  .data-table-empty {
+    @apply px-4 py-8 text-center;
+    color: var(--text-muted);
+  }
+  .data-action-btn {
+    @apply p-1.5 hover:opacity-70 cursor-pointer;
+  }
+
+  /* Cualquier ícono/link/botón de acción dentro de una tabla siempre tiene
+   * cursor de mano, sin tener que acordarse de agregarlo cada vez. */
+  .data-table button,
+  .data-table a {
+    cursor: pointer;
+  }
+}
