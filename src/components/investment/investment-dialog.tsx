@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import type { Investment } from '@/domain/investment/investment.entity';
 import { useInvestorUsers } from '@/hooks/user/use-investor-users';
+import { usePropertyOptions } from '@/hooks/property/use-property-options';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
@@ -17,6 +18,7 @@ const CURRENT_YEAR = new Date().getFullYear();
 const GESTION_YEARS = Array.from({ length: 8 }, (_, i) => CURRENT_YEAR + 1 - i);
 
 const investmentSchema = z.object({
+  propertyId: z.string().min(1, 'Selecciona una propiedad'),
   gestion: z.string().min(1, 'Selecciona una gestión'),
   description: z.string().min(1, 'La descripción es obligatoria'),
 });
@@ -27,15 +29,44 @@ interface InvestmentDialogProps {
   open: boolean;
   mode: 'create' | 'edit';
   investment: Investment | null;
+  /** Solo se usa en el alta — si la pantalla ya tiene una Propiedad elegida
+   * en su combo de filtro, conviene precargar ese mismo valor acá en vez de
+   * arrancar vacío (evita elegir la misma propiedad dos veces). Sigue
+   * siendo editable, no es un valor fijo. */
+  defaultPropertyId?: string | null;
   onClose: () => void;
-  onSave: (data: { gestion: number; description: string; investorUserIds: string[] }) => Promise<void>;
+  onSave: (data: {
+    propertyId: string;
+    gestion: number;
+    description: string;
+    investorUserIds: string[];
+  }) => Promise<void>;
 }
 
-export function InvestmentDialog({ open, mode, investment, onClose, onSave }: InvestmentDialogProps) {
+/**
+ * `propertyId` vive acá adentro, no en la pantalla que lo abre — antes
+ * dependía de que `app/(main)/investments` ya tuviera una Propiedad elegida
+ * en su combo de filtro (que ahora puede estar vacío sin que eso impida
+ * crear una inversión, ver `frontend/ARCHITECTURE.md` §14). Editable tanto
+ * en el alta como en la edición — a diferencia de otros campos "de
+ * identidad" del proyecto (`username` en `UserDialog`), no hay ninguna
+ * regla de negocio que impida "mudar" una inversión a otra propiedad de la
+ * misma empresa (`UpdateInvestmentUseCase` valida que la nueva propiedad
+ * sea de la empresa activa).
+ */
+export function InvestmentDialog({
+  open,
+  mode,
+  investment,
+  defaultPropertyId,
+  onClose,
+  onSave,
+}: InvestmentDialogProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [investorIds, setInvestorIds] = useState<string[]>(investment?.investorIds ?? []);
   const { investors, isLoading: investorsLoading } = useInvestorUsers();
+  const { properties, isLoading: propertiesLoading } = usePropertyOptions();
   const {
     register,
     handleSubmit,
@@ -43,6 +74,7 @@ export function InvestmentDialog({ open, mode, investment, onClose, onSave }: In
   } = useForm<InvestmentFormData>({
     resolver: zodResolver(investmentSchema),
     defaultValues: {
+      propertyId: mode === 'edit' && investment ? investment.propertyId : (defaultPropertyId ?? ''),
       gestion: mode === 'edit' && investment ? String(investment.gestion) : '',
       description: mode === 'edit' ? (investment?.description ?? '') : '',
     },
@@ -61,6 +93,7 @@ export function InvestmentDialog({ open, mode, investment, onClose, onSave }: In
     setError(null);
     try {
       await onSave({
+        propertyId: data.propertyId,
         gestion: Number(data.gestion),
         description: data.description,
         investorUserIds: investorIds,
@@ -87,6 +120,19 @@ export function InvestmentDialog({ open, mode, investment, onClose, onSave }: In
 
         <form onSubmit={handleSubmit(submit)} noValidate autoComplete="off" className="flex flex-col gap-8">
           <div className="flex flex-col gap-4">
+            <Select
+              label="Propiedad"
+              error={errors.propertyId?.message}
+              disabled={propertiesLoading}
+              {...register('propertyId')}
+            >
+              {properties.map((property) => (
+                <option key={property.id} value={property.id}>
+                  {property.name}
+                </option>
+              ))}
+            </Select>
+
             <Select label="Gestión" error={errors.gestion?.message} {...register('gestion')}>
               {GESTION_YEARS.map((year) => (
                 <option key={year} value={year}>

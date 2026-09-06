@@ -549,13 +549,29 @@ Los combobox de Propiedad en Inversiones/Kardex no usan ese hook — usan
   ancho — verificado con Playwright (viewport angosto, contra una copia efímera del frontend)
   en los mismos anchos exactos que reportó el usuario (894px, 636px, 390px): sin hueco en
   ninguno de los tres.
-  "Nueva inversión" solo se ofrece con una Propiedad puntual elegida
-  (`onNew={canCreate && propertyId ? ... : undefined}`) — crear necesita saber a qué propiedad
-  va, sea cual sea `activeMode`. El diálogo tiene el combobox de "Gestión" y un checklist de
-  Inversionistas (`useInvestorUsers()`, filtra por tipo de usuario del lado del cliente — trae
-  hasta 100 usuarios de la empresa activa y se queda con los de tipo Inversionista; si una
-  empresa llega a tener más que eso hay que pasar esto a un filtro real de servidor, no está
+  "Nueva inversión" es **siempre visible cuando `canCreate`**, sin importar `activeMode` ni
+  ningún filtro elegido — vive en su propia fila arriba de los 3 combos, no dentro de
+  `PageToolbar` (que ahí solo se usa para el buscador, sin `onNew`). `InvestmentDialog` tiene su
+  **propio** combobox de "Propiedad" (además de "Gestión" y el checklist de Inversionistas) —
+  ahí es donde de verdad se elige a qué propiedad va la inversión nueva, no en el filtro de la
+  página — pero si la página ya tiene una Propiedad elegida en su filtro, ese valor se precarga
+  en el combo del diálogo (`defaultPropertyId`, prop nueva de `InvestmentDialog`) para no
+  hacer elegir la misma propiedad dos veces — sigue siendo editable, no un valor fijo. **Al
+  editar, el mismo combo también es editable** — a diferencia de otros campos "de identidad"
+  del proyecto (`username` en `UserDialog`), no hay ninguna regla de negocio que impida "mudar"
+  una inversión a otra propiedad de la misma empresa; `UpdateInvestmentUseCase` (backend) valida
+  que la propiedad nueva sea de la empresa activa, mismo chequeo que al crear. Los
+  inversionistas salen de `useInvestorUsers()` (filtra por tipo de usuario del lado del cliente
+  — trae hasta 100 usuarios de la empresa activa y se queda con los de tipo Inversionista; si
+  una empresa llega a tener más que eso hay que pasar esto a un filtro real de servidor, no está
   hecho todavía).
+  **Iteración previa, descartada**: el combo de Propiedad se deshabilitaba al editar (mismo
+  criterio que `username` en `UserDialog`) — el usuario aclaró que sí se puede/debe poder
+  cambiar la propiedad de una inversión ya creada, a diferencia de un identificador de login.
+  **Iteración previa, descartada**: el botón dependía de que la página ya tuviera una Propiedad
+  elegida en su combo de filtro (`onNew={canCreate && propertyId ? ... : undefined}`) — el
+  usuario señaló que no tenía sentido: con los tres filtros pudiendo estar vacíos a la vez (ver
+  arriba), el botón desaparecía sin ningún motivo real para crear una inversión nueva.
   **Iteración previa, descartada**: "Propiedad" era el único filtro y el que disparaba la
   consulta (`GET /investments?propertyId=`, que sigue existiendo — lo usa el atajo "Ver kardex"
   de la tabla) — el usuario pidió primero agregar "Gestión" como filtro adicional, después

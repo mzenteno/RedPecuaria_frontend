@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { Plus } from 'lucide-react';
 import { usePropertyOptions } from '@/hooks/property/use-property-options';
 import { useInvestmentsByGestion } from '@/hooks/investment/use-investments-by-gestion';
 import { useInvestmentsByProperty } from '@/hooks/investment/use-investments-by-property';
@@ -168,10 +169,14 @@ function InvestmentsPageContent() {
     setDialog((prev) => ({ ...prev, open: false }));
   }
 
-  async function handleSave(data: { gestion: number; description: string; investorUserIds: string[] }): Promise<void> {
-    if (!propertyId) return;
+  async function handleSave(data: {
+    propertyId: string;
+    gestion: number;
+    description: string;
+    investorUserIds: string[];
+  }): Promise<void> {
     if (dialog.mode === 'create') {
-      await createInvestment({ propertyId, ...data });
+      await createInvestment(data);
     } else if (dialog.investment) {
       await updateInvestment(dialog.investment.id, data);
     }
@@ -192,47 +197,59 @@ function InvestmentsPageContent() {
     <div>
       <h1 className="tipo-titulo-card mb-6">Inversiones</h1>
       <div className="card">
-        <div
-          className="border-b p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
-          style={{ borderColor: 'var(--border-subtle)' }}
-        >
-          <Select
-            label="Gestión"
-            value={gestion}
-            onChange={(e) => handleGestionChange(e.target.value)}
-            onClear={() => handleGestionChange('')}
-          >
-            {GESTION_YEARS.map((year) => (
-              <option key={year} value={year}>
-                {year}
-              </option>
-            ))}
-          </Select>
-          <Select
-            label="Propiedad"
-            value={propertyId ?? ''}
-            disabled={propertiesLoading}
-            onChange={(e) => handlePropertyChange(e.target.value || null)}
-            onClear={() => handlePropertyChange(null)}
-          >
-            {properties.map((property) => (
-              <option key={property.id} value={property.id}>
-                {property.name}
-              </option>
-            ))}
-          </Select>
-          <Select
-            label="Inversionista"
-            value={investorUserId ?? ''}
-            onChange={(e) => handleInvestorChange(e.target.value || null)}
-            onClear={() => handleInvestorChange(null)}
-          >
-            {investors.map((investor) => (
-              <option key={investor.id} value={investor.id}>
-                {investor.fullName}
-              </option>
-            ))}
-          </Select>
+        <div className="border-b p-5" style={{ borderColor: 'var(--border-subtle)' }}>
+          {canCreate && (
+            // Siempre visible, sin importar `activeMode` — antes dependía de
+            // tener una Propiedad ya elegida en el filtro de abajo, pero
+            // crear una inversión ya no necesita eso: `InvestmentDialog`
+            // tiene su propio combo de Propiedad (ver `frontend/
+            // ARCHITECTURE.md` §14).
+            <div className="mb-4 flex justify-end">
+              <button type="button" onClick={openCreate} className="toolbar-btn-primary">
+                <Plus className="h-4 w-4" />
+                Nueva inversión
+              </button>
+            </div>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <Select
+              label="Gestión"
+              value={gestion}
+              onChange={(e) => handleGestionChange(e.target.value)}
+              onClear={() => handleGestionChange('')}
+            >
+              {GESTION_YEARS.map((year) => (
+                <option key={year} value={year}>
+                  {year}
+                </option>
+              ))}
+            </Select>
+            <Select
+              label="Propiedad"
+              value={propertyId ?? ''}
+              disabled={propertiesLoading}
+              onChange={(e) => handlePropertyChange(e.target.value || null)}
+              onClear={() => handlePropertyChange(null)}
+            >
+              {properties.map((property) => (
+                <option key={property.id} value={property.id}>
+                  {property.name}
+                </option>
+              ))}
+            </Select>
+            <Select
+              label="Inversionista"
+              value={investorUserId ?? ''}
+              onChange={(e) => handleInvestorChange(e.target.value || null)}
+              onClear={() => handleInvestorChange(null)}
+            >
+              {investors.map((investor) => (
+                <option key={investor.id} value={investor.id}>
+                  {investor.fullName}
+                </option>
+              ))}
+            </Select>
+          </div>
         </div>
 
         {activeMode ? (
@@ -240,8 +257,6 @@ function InvestmentsPageContent() {
             <PageToolbar
               search={searchInput}
               onSearchChange={setSearchInput}
-              onNew={canCreate && propertyId ? openCreate : undefined}
-              newLabel="Nueva inversión"
               placeholder="Buscar por descripción..."
             />
             <InvestmentTable
@@ -274,6 +289,7 @@ function InvestmentsPageContent() {
         open={dialog.open}
         mode={dialog.mode}
         investment={dialog.investment}
+        defaultPropertyId={propertyId}
         onClose={closeDialog}
         onSave={handleSave}
       />

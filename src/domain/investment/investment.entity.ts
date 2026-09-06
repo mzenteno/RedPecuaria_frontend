@@ -16,6 +16,7 @@ export interface CreateInvestmentData {
 }
 
 export interface UpdateInvestmentData {
+  propertyId: string;
   gestion: number;
   description: string;
   investorUserIds: string[];
