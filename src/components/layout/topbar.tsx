@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import {
-  Bell,
   ChevronDown,
   LogOut,
   Menu as MenuIcon,
@@ -101,12 +100,13 @@ export function TopBar() {
       </div>
 
       <div className="flex items-center gap-1">
+        {/* "Notificaciones" se quitó (2026-09-06) — sin ningún evento de
+            negocio que notificar todavía, no tenía sentido dejar el ícono
+            decorativo indefinidamente (ver `ARCHITECTURE.md` §8). "Buscar"
+            sigue decorativo a propósito, pendiente de un buscador global
+            real cuando se justifique. */}
         <button type="button" className="topbar-icon-btn" aria-label="Buscar">
           <Search size={20} strokeWidth={1.5} />
-        </button>
-        <button type="button" className="topbar-icon-btn relative" aria-label="Notificaciones">
-          <Bell size={20} strokeWidth={1.5} />
-          <span className="circle absolute right-1.5 top-1.5 h-2 w-2" style={{ background: 'var(--danger)' }} />
         </button>
 
         <div className="relative ml-1" ref={menuRef}>

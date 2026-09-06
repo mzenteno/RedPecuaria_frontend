@@ -110,7 +110,7 @@ export function InvestmentDialog({
 
   return (
     <div className="dialog-overlay">
-      <div className="dialog-panel flex flex-col gap-8">
+      <div className="dialog-panel dialog-panel-lg flex flex-col gap-8">
         <div className="flex flex-col gap-1">
           <h2 className="tipo-titulo-seccion">{mode === 'create' ? 'Nueva inversión' : 'Editar inversión'}</h2>
           <p className="tipo-secundario">
@@ -167,9 +167,7 @@ export function InvestmentDialog({
                       onChange={() => toggleInvestor(investor.id)}
                       className="h-4 w-4 cursor-pointer accent-[var(--primary)]"
                     />
-                    <span className="tipo-normal">
-                      {investor.fullName} ({investor.username})
-                    </span>
+                    <span className="tipo-normal">{investor.fullName}</span>
                   </label>
                 ))}
               </div>

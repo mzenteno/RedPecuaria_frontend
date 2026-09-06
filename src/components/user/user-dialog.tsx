@@ -57,7 +57,7 @@ export function UserDialog({ open, mode, user, onClose, onSave }: UserDialogProp
 
   return (
     <div className="dialog-overlay">
-      <div className="dialog-panel flex flex-col gap-8">
+      <div className="dialog-panel dialog-panel-lg flex flex-col gap-8">
         <div className="flex flex-col gap-1">
           <h2 className="tipo-titulo-seccion">{mode === 'create' ? 'Nuevo usuario' : 'Editar usuario'}</h2>
           <p className="tipo-secundario">

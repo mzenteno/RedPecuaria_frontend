@@ -41,6 +41,20 @@ Este documento define las reglas de arquitectura del frontend. Es el equivalente
   en el contenedor flex que envuelve título+subtítulo, campo(s) y footer — no márgenes sueltos
   por bloque (`mb-8`/`mb-4`/`mt-6` sin relación entre sí no garantizan espacios iguales, aunque
   el número final "parezca" parecido).
+- **`.dialog-panel-lg` (clase adicional, junto a `.dialog-panel`) — pantalla completa en mobile
+  para diálogos con muchos campos**: por debajo de `sm` (640px), en vez del modal chico
+  centrado de siempre, pasa a ocupar toda la pantalla (`fixed inset-0 w-full h-full`, sin
+  borde) — el criterio es el mismo que usa cualquier app mobile (Material Design/iOS): un modal
+  chico está bien para confirmaciones cortas de 1-2 campos, pero desperdicia espacio y se ve
+  poco intencional en un formulario largo. Arriba de `sm` es idéntico a `.dialog-panel` (mismo
+  `max-w-md`, o el ancho que cada diálogo ya sobreescriba con `style`). Se aplicó en
+  `UserDialog`, `PropertyDialog`, `InvestmentDialog` y `KardexEntryDialog` (los 4 con más
+  campos) — `CompanyDialog`/`RoleDialog` (un solo campo) se quedan con `.dialog-panel` a secas.
+  El panel entero scrollea como una sola región (título + campos + Cancelar/Guardar juntos) —
+  se decidió así en vez de header/footer fijos con una región scrolleable en el medio, por ser
+  la solución más simple que ya resuelve el problema real (dejar de desperdiciar espacio) sin
+  la complejidad extra de tres regiones separadas. Verificado con Playwright en el mismo
+  viewport que reportó el usuario (414×846, Galaxy Note) y en desktop (1400px, sin cambios).
 - **Formato de fecha: `DD/MM/YYYY`**, siempre — usar `lib/format-date.ts` (`formatDate()`), no
   `Intl.DateTimeFormat`/`toLocaleDateString` sueltos en cada componente.
 - **Botones estandarizados** (`components/ui/button.tsx`, prop `variant`): **todo** botón que
@@ -276,6 +290,12 @@ Mismo criterio que el proyecto de referencia, que ya es coherente y vale la pena
 
 - Sesión en `localStorage`, sin cookies httpOnly (§4).
 - Guard de rutas client-side, no middleware server-side (§4).
+- **Ícono de "Buscar" del `TopBar`, decorativo, sin buscador global todavía** — decisión
+  consciente, no un olvido: cada pantalla de listado ya tiene su propio buscador (Propiedades,
+  Inversiones, Usuarios, Kardex), un buscador global cruzando varias tablas a la vez sería una
+  comodidad extra sin una necesidad real sin cubrir hoy. Si algún día se justifica, hace falta
+  un endpoint nuevo en el backend (no existe nada que busque across varias tablas) y una UI de
+  resultados categorizados.
 - **Empresas** (`app/(main)/companies`, §9), **Usuarios** (`app/(main)/users`, §10), **Roles**
   (`app/(main)/roles`, §11) y **Permisos** (`app/(main)/permissions`, §12) ya tienen pantalla —
   el módulo `auth` completo tiene su CRUD/editor en el frontend.
@@ -288,9 +308,13 @@ Mismo criterio que el proyecto de referencia, que ya es coherente y vale la pena
   faltar en una sesión ya abierta antes de este cambio (el token no se reemite hasta el próximo
   login/refresh) — el email queda de respaldo. **"Mi perfil"** navega a `app/(main)/profile`
   (ver abajo). Sin ítem "Configuración" — se quitó por no navegar a ningún lado (no existe esa
-  pantalla), en vez de dejarlo como acción decorativa. Los íconos de buscar/notificaciones sí
-  quedan decorativos, sin funcionalidad (tampoco la tienen en la referencia) — esos no se
-  quitaron, a diferencia de "Configuración".
+  pantalla), en vez de dejarlo como acción decorativa. **Sin ícono de "Notificaciones"** — se
+  quitó por el mismo motivo (2026-09-06): sin ningún evento de negocio que notificar todavía,
+  no tenía sentido dejarlo decorativo indefinidamente. **El ícono de "Buscar" sí sigue
+  decorativo, a propósito** — cada pantalla de listado ya tiene su propio buscador (Propiedades,
+  Inversiones, Usuarios, Kardex); un buscador global cruzando varias tablas a la vez es una
+  comodidad extra, no una necesidad sin cubrir hoy — queda pendiente, no olvidado, para cuando
+  se justifique (§8).
 
 ### "Mi perfil" — acción sobre uno mismo, no un módulo de negocio
 

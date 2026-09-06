@@ -81,7 +81,7 @@ export function PropertyDialog({ open, mode, property, onClose, onSave }: Proper
 
   return (
     <div className="dialog-overlay">
-      <div className="dialog-panel flex flex-col gap-8" style={{ maxWidth: '64rem' }}>
+      <div className="dialog-panel dialog-panel-lg flex flex-col gap-8" style={{ maxWidth: '64rem' }}>
         <div className="flex flex-col gap-1">
           <h2 className="tipo-titulo-seccion">{mode === 'create' ? 'Nueva propiedad' : 'Editar propiedad'}</h2>
           <p className="tipo-secundario">
