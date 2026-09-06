@@ -1,5 +1,5 @@
 import type { PaginatedResult, PaginationParams } from '@/domain/common/paginated-result';
-import type { User, CreateUserData, UpdateUserData } from './user.entity';
+import type { User, CreateUserData, UpdateUserData, ChangePasswordData } from './user.entity';
 
 export interface UserRepository {
   /** `GET /users?page=&pageSize=&search=` — paginado en el servidor, a
@@ -11,4 +11,7 @@ export interface UserRepository {
   /** `PATCH /users/:id/user-type` — acción separada de `update`, mismo
    * criterio que el backend (`UpdateUserUseCase` no toca `userTypeId`). */
   changeUserType(id: string, userTypeId: string): Promise<void>;
+  /** `PATCH /users/me/password` — sin `id`: siempre el usuario logueado,
+   * resuelto del token en el backend (ver `ChangeOwnPasswordUseCase`). */
+  changeOwnPassword(data: ChangePasswordData): Promise<void>;
 }

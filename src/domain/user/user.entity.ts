@@ -26,3 +26,12 @@ export interface CreateUserData {
  * empresa/rol tienen sus propias acciones, no se tocan desde acá (mismo
  * criterio que el backend, ver `UpdateUserUseCase`). */
 export type UpdateUserData = Pick<User, 'email' | 'fullName'>;
+
+/** "Mi perfil" — cambiar la propia contraseña exige la actual (a diferencia
+ * de `UpdateUserData`, que no pide nada más), ver `ChangeOwnPasswordUseCase`
+ * del backend. Sin `userId`: siempre es el usuario logueado, el backend lo
+ * resuelve del token, nunca de un parámetro. */
+export interface ChangePasswordData {
+  currentPassword: string;
+  newPassword: string;
+}

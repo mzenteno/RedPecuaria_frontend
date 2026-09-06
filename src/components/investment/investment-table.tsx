@@ -1,11 +1,16 @@
-import { BookOpen, Pencil, Trash2 } from 'lucide-react';
+import { ClipboardList, Pencil, Trash2 } from 'lucide-react';
 import type { Investment } from '@/domain/investment/investment.entity';
+import type { Property } from '@/domain/property/property.entity';
 import type { User } from '@/domain/user/user.entity';
 import { formatDate } from '@/lib/format-date';
 
 interface InvestmentTableProps {
   investments: Investment[];
   investors: User[];
+  /** Ahora que "Gestión" (no "Propiedad") es el filtro que dispara la
+   * consulta, la tabla puede mostrar inversiones de varias propiedades a
+   * la vez — hace falta la columna para saber de cuál es cada una. */
+  properties: Property[];
   loading: boolean;
   canEdit: boolean;
   canDelete: boolean;
@@ -20,6 +25,7 @@ interface InvestmentTableProps {
 export function InvestmentTable({
   investments,
   investors,
+  properties,
   loading,
   canEdit,
   canDelete,
@@ -43,11 +49,16 @@ export function InvestmentTable({
     return names.length > 0 ? names.join(', ') : '—';
   }
 
+  function propertyName(propertyId: string): string {
+    return properties.find((property) => property.id === propertyId)?.name ?? '—';
+  }
+
   return (
     <div className="data-table-wrapper">
-      <table className="data-table">
+      <table className="data-table" style={{ minWidth: '64rem' }}>
         <thead>
           <tr>
+            <th>Propiedad</th>
             <th>Gestión</th>
             <th>Descripción</th>
             <th>Inversionistas</th>
@@ -58,6 +69,7 @@ export function InvestmentTable({
         <tbody>
           {investments.map((investment) => (
             <tr key={investment.id}>
+              <td>{propertyName(investment.propertyId)}</td>
               <td>{investment.gestion}</td>
               <td>{investment.description}</td>
               <td>{investorNames(investment.investorIds)}</td>
@@ -71,7 +83,7 @@ export function InvestmentTable({
                       className="data-action-btn"
                       aria-label="Ver kardex"
                     >
-                      <BookOpen className="h-5 w-5" strokeWidth={1.5} />
+                      <ClipboardList className="h-5 w-5" strokeWidth={1.5} />
                     </button>
                   )}
                   {canEdit && (
@@ -100,7 +112,7 @@ export function InvestmentTable({
           ))}
           {investments.length === 0 && (
             <tr>
-              <td colSpan={5} className="data-table-empty">
+              <td colSpan={6} className="data-table-empty">
                 No se encontraron inversiones
               </td>
             </tr>

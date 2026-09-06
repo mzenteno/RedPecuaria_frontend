@@ -1,14 +1,17 @@
 'use client';
 
-import { useState } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { useProperties } from '@/hooks/property/use-properties';
+import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { ArrowLeft } from 'lucide-react';
+import { usePropertyOptions } from '@/hooks/property/use-property-options';
 import { useInvestments } from '@/hooks/investment/use-investments';
+import { useMyInvestments } from '@/hooks/investment/use-my-investments';
 import { useKardexEntries } from '@/hooks/kardex/use-kardex-entries';
+import { useInvestorUsers } from '@/hooks/user/use-investor-users';
 import { usePermission } from '@/hooks/menu/use-permission';
 import type { KardexEntry, KardexEntryFields } from '@/domain/kardex/kardex-entry.entity';
-import { Select } from '@/components/ui/select';
 import { PageToolbar } from '@/components/ui/page-toolbar';
+import { Pagination } from '@/components/ui/pagination';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { KardexTable } from '@/components/kardex/kardex-table';
 import { KardexEntryDialog } from '@/components/kardex/kardex-entry-dialog';
@@ -19,6 +22,9 @@ import { ApiError } from '@/infrastructure/http/http-client';
 // rol puede tener acceso a Kardex sin tener acceso al CRUD de Inversiones
 // (o viceversa). Pantalla de nivel superior en el sidebar, no un drill-down.
 const MENU_KEY = 'kardex';
+const MY_INVESTMENTS_PAGE_SIZE = 10;
+const ENTRIES_PAGE_SIZE = 20;
+const SEARCH_DEBOUNCE_MS = 300;
 
 interface DialogState {
   open: boolean;
@@ -28,27 +34,68 @@ interface DialogState {
 }
 
 export default function KardexPage() {
+  const searchParams = useSearchParams();
+  // Ir de "/kardex?propertyId=&investmentId=&gestion=" (atajo) a "/kardex"
+  // (clic directo en el ítem del sidebar) es la MISMA ruta — Next no
+  // remonta el componente solo porque cambia el query string, así que el
+  // estado local (`investmentId`, etc.) quedaba pegado del clic anterior.
+  // La `key` fuerza el remount cada vez que cambia la URL de esta pantalla.
   return (
     <RequirePermission menuKey={MENU_KEY}>
-      <KardexPageContent />
+      <KardexPageContent key={searchParams.toString()} />
     </RequirePermission>
   );
 }
 
 function KardexPageContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
-  const { properties, isLoading: propertiesLoading } = useProperties();
-  // Preseleccionados si se llega desde el botón "Ver kardex" de la tabla de
-  // Inversiones — igual de válido elegirlos a mano acá si solo se tiene
-  // permiso sobre Kardex y nunca se llega a ver esa tabla.
-  const [propertyId, setPropertyId] = useState<string | null>(() => searchParams.get('propertyId'));
+  const { properties } = usePropertyOptions();
+  // Atajo desde la tabla de Inversiones ("Ver kardex"): llega con los tres
+  // en la URL. `propertyId` solo se usa para resolver esa inversión puntual
+  // — la lista de abajo siempre es "mis inversiones", no las de esa
+  // propiedad. `shortcutGestion` viaja solo para poder reconstruir esos
+  // mismos filtros al volver (ver el botón "Volver a Inversiones").
+  const [shortcutPropertyId] = useState<string | null>(() => searchParams.get('propertyId'));
+  const [shortcutGestion] = useState<string | null>(() => searchParams.get('gestion'));
   const [investmentId, setInvestmentId] = useState<string | null>(() => searchParams.get('investmentId'));
+  const [myInvestmentsPage, setMyInvestmentsPage] = useState(1);
 
-  const { investments, isLoading: investmentsLoading } = useInvestments(propertyId);
+  const {
+    investments: myInvestments,
+    total: myInvestmentsTotal,
+    totalPages: myInvestmentsTotalPages,
+    isLoading: myInvestmentsLoading,
+  } = useMyInvestments(myInvestmentsPage, MY_INVESTMENTS_PAGE_SIZE);
+  const { investments: shortcutInvestments } = useInvestments(shortcutPropertyId);
   const { canCreate, canEdit, canDelete } = usePermission(MENU_KEY);
-  const { entries, isLoading, createEntry, updateEntry, deactivateEntry } = useKardexEntries(investmentId);
+  const { investors: allInvestors } = useInvestorUsers();
 
+  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
+  const [entriesPage, setEntriesPage] = useState(1);
+
+  // Búsqueda de servidor: como el listado pagina de verdad, un filtro que
+  // solo mirara la página ya descargada sería engañoso — el debounce evita
+  // mandar un request por letra.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearch(searchInput);
+      setEntriesPage(1);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  const {
+    entries,
+    total: entriesTotal,
+    totalPages: entriesTotalPages,
+    isLoading,
+    createEntry,
+    updateEntry,
+    deactivateEntry,
+  } = useKardexEntries(investmentId, entriesPage, ENTRIES_PAGE_SIZE, search);
+
   const [dialog, setDialog] = useState<DialogState>({
     open: false,
     mode: 'create',
@@ -58,12 +105,17 @@ function KardexPageContent() {
   const [pendingDeactivate, setPendingDeactivate] = useState<KardexEntry | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const selectedInvestment = investments.find((investment) => investment.id === investmentId) ?? null;
-  const filtered = entries.filter((entry) => entry.detail.toLowerCase().includes(search.toLowerCase()));
+  const selectedInvestment =
+    myInvestments.find((investment) => investment.id === investmentId) ??
+    shortcutInvestments.find((investment) => investment.id === investmentId) ??
+    null;
+  // Solo los inversionistas de ESTA inversión puntual, no todos los de la
+  // empresa — para el combo de "Inversionista" del diálogo (movimientos de
+  // tipo "venta") y para resolver el nombre en la tabla.
+  const investors = allInvestors.filter((investor) => selectedInvestment?.investorIds.includes(investor.id));
 
-  function handlePropertyChange(id: string | null): void {
-    setPropertyId(id);
-    setInvestmentId(null);
+  function propertyName(propertyId: string): string {
+    return properties.find((property) => property.id === propertyId)?.name ?? '—';
   }
 
   function openCreate(): void {
@@ -98,66 +150,103 @@ function KardexPageContent() {
     }
   }
 
+  if (!investmentId) {
+    return (
+      <div>
+        <h1 className="tipo-titulo-card mb-6">Mis inversiones</h1>
+        <div className="card">
+          <div className="data-table-wrapper">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Propiedad</th>
+                  <th>Gestión</th>
+                  <th>Descripción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {myInvestmentsLoading && (
+                  <tr>
+                    <td colSpan={3} className="data-table-empty">
+                      Cargando...
+                    </td>
+                  </tr>
+                )}
+                {!myInvestmentsLoading &&
+                  myInvestments.map((investment) => (
+                    <tr
+                      key={investment.id}
+                      onClick={() => setInvestmentId(investment.id)}
+                      className="cursor-pointer"
+                    >
+                      <td>{propertyName(investment.propertyId)}</td>
+                      <td>{investment.gestion}</td>
+                      <td>{investment.description}</td>
+                    </tr>
+                  ))}
+                {!myInvestmentsLoading && myInvestments.length === 0 && (
+                  <tr>
+                    <td colSpan={3} className="data-table-empty">
+                      No participás como inversionista en ninguna inversión todavía.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <Pagination
+            page={myInvestmentsPage}
+            pageSize={MY_INVESTMENTS_PAGE_SIZE}
+            total={myInvestmentsTotal}
+            totalPages={myInvestmentsTotalPages}
+            onPageChange={setMyInvestmentsPage}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
+      <button
+        type="button"
+        onClick={() =>
+          shortcutPropertyId
+            ? router.push(`/investments?gestion=${shortcutGestion ?? ''}&propertyId=${shortcutPropertyId}`)
+            : setInvestmentId(null)
+        }
+        className="tipo-link mb-4 flex items-center gap-1 cursor-pointer"
+      >
+        <ArrowLeft className="h-4 w-4" strokeWidth={1.5} />
+        {shortcutPropertyId ? 'Volver a Inversiones' : 'Volver a Mis inversiones'}
+      </button>
       <h1 className="tipo-titulo-card mb-6">
         Kardex{selectedInvestment ? ` — ${selectedInvestment.description} (${selectedInvestment.gestion})` : ''}
       </h1>
       <div className="card">
-        <div className="border-b p-5 flex flex-wrap gap-4" style={{ borderColor: 'var(--border-subtle)' }}>
-          <div className="max-w-xs w-full">
-            <Select
-              label="Propiedad"
-              value={propertyId ?? ''}
-              disabled={propertiesLoading}
-              onChange={(e) => handlePropertyChange(e.target.value || null)}
-            >
-              {properties.map((property) => (
-                <option key={property.id} value={property.id}>
-                  {property.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div className="max-w-xs w-full">
-            <Select
-              label="Inversión"
-              value={investmentId ?? ''}
-              disabled={!propertyId || investmentsLoading}
-              onChange={(e) => setInvestmentId(e.target.value || null)}
-            >
-              {investments.map((investment) => (
-                <option key={investment.id} value={investment.id}>
-                  {investment.description} ({investment.gestion})
-                </option>
-              ))}
-            </Select>
-          </div>
-        </div>
-
-        {investmentId ? (
-          <>
-            <PageToolbar
-              search={search}
-              onSearchChange={setSearch}
-              onNew={canCreate ? openCreate : undefined}
-              newLabel="Nuevo movimiento"
-              placeholder="Buscar por detalle..."
-            />
-            <KardexTable
-              entries={filtered}
-              loading={isLoading}
-              canEdit={canEdit}
-              canDelete={canDelete}
-              onEdit={openEdit}
-              onDeactivate={setPendingDeactivate}
-            />
-          </>
-        ) : (
-          <div className="flex items-center justify-center py-16">
-            <span className="tipo-muted">Selecciona una propiedad y una inversión para ver su kardex.</span>
-          </div>
-        )}
+        <PageToolbar
+          search={searchInput}
+          onSearchChange={setSearchInput}
+          onNew={canCreate ? openCreate : undefined}
+          newLabel="Nuevo movimiento"
+          placeholder="Buscar por detalle..."
+        />
+        <KardexTable
+          entries={entries}
+          investors={investors}
+          loading={isLoading}
+          canEdit={canEdit}
+          canDelete={canDelete}
+          onEdit={openEdit}
+          onDeactivate={setPendingDeactivate}
+        />
+        <Pagination
+          page={entriesPage}
+          pageSize={ENTRIES_PAGE_SIZE}
+          total={entriesTotal}
+          totalPages={entriesTotalPages}
+          onPageChange={setEntriesPage}
+        />
       </div>
 
       <KardexEntryDialog
@@ -165,6 +254,7 @@ function KardexPageContent() {
         open={dialog.open}
         mode={dialog.mode}
         entry={dialog.entry}
+        investors={investors}
         onClose={closeDialog}
         onSave={handleSave}
       />

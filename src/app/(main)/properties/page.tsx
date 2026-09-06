@@ -1,8 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useProperties } from '@/hooks/property/use-properties';
-import { useClientPagination } from '@/hooks/use-client-pagination';
 import { usePermission } from '@/hooks/menu/use-permission';
 import type { Property } from '@/domain/property/property.entity';
 import { PageToolbar } from '@/components/ui/page-toolbar';
@@ -15,6 +14,7 @@ import { ApiError } from '@/infrastructure/http/http-client';
 
 const MENU_KEY = 'properties';
 const PAGE_SIZE = 10;
+const SEARCH_DEBOUNCE_MS = 300;
 
 interface DialogState {
   open: boolean;
@@ -32,10 +32,25 @@ export default function PropertiesPage() {
 }
 
 function PropertiesPageContent() {
-  const { properties, isLoading, createProperty, updateProperty, deactivateProperty } = useProperties();
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+
+  // Búsqueda de servidor: a diferencia de "Empresas" (filtra un array ya
+  // descargado), acá cada tecleo dispararía un `GET /properties?search=`
+  // nuevo — el debounce evita mandar un request por letra.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearch(searchInput);
+      setPage(1);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  const { properties, isLoading, total, totalPages, createProperty, updateProperty, deactivateProperty } =
+    useProperties(page, PAGE_SIZE, search);
   const { canCreate, canEdit, canDelete } = usePermission(MENU_KEY);
 
-  const [search, setSearch] = useState('');
   const [dialog, setDialog] = useState<DialogState>({
     open: false,
     mode: 'create',
@@ -44,14 +59,6 @@ function PropertiesPageContent() {
   });
   const [pendingDeactivate, setPendingDeactivate] = useState<Property | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  const filtered = properties.filter((p) => p.name.toLowerCase().includes(search.toLowerCase()));
-  const { page, setPage, totalPages, pageItems, total } = useClientPagination(filtered, PAGE_SIZE);
-
-  function handleSearchChange(value: string): void {
-    setSearch(value);
-    setPage(1);
-  }
 
   function openCreate(): void {
     setDialog((prev) => ({ open: true, mode: 'create', property: null, sessionId: prev.sessionId + 1 }));
@@ -89,27 +96,21 @@ function PropertiesPageContent() {
       <h1 className="tipo-titulo-card mb-6">Propiedades</h1>
       <div className="card">
         <PageToolbar
-          search={search}
-          onSearchChange={handleSearchChange}
+          search={searchInput}
+          onSearchChange={setSearchInput}
           onNew={canCreate ? openCreate : undefined}
           newLabel="Nueva propiedad"
           placeholder="Buscar por nombre..."
         />
         <PropertyTable
-          properties={pageItems}
+          properties={properties}
           loading={isLoading}
           canEdit={canEdit}
           canDelete={canDelete}
           onEdit={openEdit}
           onDeactivate={setPendingDeactivate}
         />
-        <Pagination
-          page={page}
-          pageSize={PAGE_SIZE}
-          total={total}
-          totalPages={totalPages}
-          onPageChange={setPage}
-        />
+        <Pagination page={page} pageSize={PAGE_SIZE} total={total} totalPages={totalPages} onPageChange={setPage} />
       </div>
 
       <PropertyDialog

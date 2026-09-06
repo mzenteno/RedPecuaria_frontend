@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { useMenu } from '@/hooks/menu/use-menu';
@@ -35,6 +35,7 @@ function ActiveAccentBar() {
 
 function MenuNode({ node, depth }: { node: MenuTreeNode; depth: number }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [expanded, setExpanded] = useState(true);
   const { close } = useSidebar();
   // "Hoja" = no tiene hijos, sin importar si ya tiene `path` asignado — hoy
@@ -43,7 +44,17 @@ function MenuNode({ node, depth }: { node: MenuTreeNode; depth: number }) {
   // sin `path` se muestra igual, pero sin navegar a ningún lado.
   const hasChildren = node.children.length > 0;
   const isLeaf = !hasChildren;
-  const isActive = isLeaf && node.path !== null && pathname === node.path;
+  // Caso especial (único, a propósito): "Ver kardex" desde la tabla de
+  // Inversiones navega a /kardex con propertyId+investmentId en la URL —
+  // seguís conceptualmente en Inversiones (por eso el botón "Volver" de esa
+  // pantalla también dice "Volver a Inversiones", no "Volver a Mis
+  // inversiones"), así que acá se sigue resaltando ese ítem, no "Kardex".
+  // Entrando directo desde el ítem "Kardex" del sidebar (sin esos query
+  // params) se resalta Kardex, normal.
+  const viaInvestmentsShortcut = pathname === '/kardex' && searchParams.has('propertyId');
+  const isActive = isLeaf && node.path !== null && (
+    viaInvestmentsShortcut ? node.key === 'investments' : pathname === node.path
+  );
   const style = { paddingLeft: `${12 + depth * 14}px` };
 
   if (isLeaf) {

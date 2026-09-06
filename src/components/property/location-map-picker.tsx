@@ -47,8 +47,8 @@ export function LocationMapPicker({ latitude, longitude, onChange }: LocationMap
   const [initialCenter] = useState<[number, number]>([latitude, longitude]);
 
   return (
-    <div className="overflow-hidden border" style={{ height: 260, borderColor: 'var(--border-input)' }}>
-      <MapContainer center={initialCenter} zoom={13} style={{ height: '100%', width: '100%' }}>
+    <div className="overflow-hidden border" style={{ height: 520, borderColor: 'var(--border-input)' }}>
+      <MapContainer center={initialCenter} zoom={15} style={{ height: '100%', width: '100%' }}>
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"

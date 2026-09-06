@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Bell,
   ChevronDown,
@@ -9,7 +10,6 @@ import {
   Menu as MenuIcon,
   Moon,
   Search,
-  Settings,
   Sun,
   UserCircle2,
 } from 'lucide-react';
@@ -22,35 +22,37 @@ import { CompanySwitcher } from './company-switcher';
 
 interface TokenDisplayInfo {
   email: string;
+  username: string;
+  fullName: string;
   isSuperAdmin: boolean;
 }
 
-/**
- * No hay `fullName` disponible en el token (ver ARCHITECTURE.md §4) — el
- * "nombre" que se muestra es el email, y el "rol" es una etiqueta gruesa
- * derivada de `isSuperAdmin` (no el nombre real del `Role`, que es por
- * empresa y no viaja en el JWT). Ajustar cuando el backend exponga el perfil
- * completo del usuario autenticado.
- */
 function readTokenInfo(): TokenDisplayInfo | null {
   const token = getAccessToken();
   return token ? decodeJwtPayload<TokenDisplayInfo>(token) : null;
 }
 
-function getInitials(email: string): string {
-  return email.charAt(0).toUpperCase();
+function getInitials(name: string): string {
+  return name.charAt(0).toUpperCase();
 }
 
 export function TopBar() {
   const { toggle } = useSidebar();
   const { theme, toggleTheme } = useTheme();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [menuOpen, setMenuOpen] = useState(false);
   const [tokenInfo] = useState<TokenDisplayInfo | null>(readTokenInfo);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const displayName = tokenInfo?.email ?? 'Usuario';
-  const roleLabel = tokenInfo?.isSuperAdmin ? 'Super Administrador' : 'Usuario';
+  // `username`/`fullName` pueden faltar en una sesión ya abierta antes de
+  // este cambio (el token no se vuelve a emitir hasta el próximo
+  // login/refresh) — el email es un respaldo razonable mientras tanto.
+  // El trigger (afuera) y el avatar muestran `username`; el header del
+  // dropdown muestra el nombre real arriba y el email debajo.
+  const displayName = tokenInfo?.username || tokenInfo?.email || 'Usuario';
+  const displayFullName = tokenInfo?.fullName || displayName;
+  const displayEmail = tokenInfo?.email ?? '';
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent): void {
@@ -72,6 +74,12 @@ export function TopBar() {
       }
     }
     clearSession();
+    // El QueryClient vive en la raíz de la app (query.provider.tsx) y nunca
+    // se recrea entre sesiones — sin este `clear()`, todo lo que quedó en
+    // cache (menú, permisos, listados) sigue "fresco" para React Query y se
+    // le muestra tal cual al próximo usuario que se loguee en la misma
+    // pestaña, aunque sea una persona/empresa/rol distinto.
+    queryClient.clear();
     router.push('/login');
   }
 
@@ -119,20 +127,23 @@ export function TopBar() {
               style={{ background: 'var(--bg-card)', borderColor: 'var(--border-subtle)' }}
             >
               <div className="border-b px-5 py-4" style={{ borderColor: 'var(--border-subtle)' }}>
-                <p className="text-[0.9375rem] font-semibold">{displayName}</p>
+                <p className="text-[0.9375rem] font-semibold">{displayFullName}</p>
                 <p className="mt-0.5 text-xs" style={{ color: 'var(--text-placeholder)' }}>
-                  {roleLabel}
+                  {displayEmail}
                 </p>
               </div>
 
               <div className="px-2 py-2">
-                <button type="button" onClick={() => setMenuOpen(false)} className="topbar-menu-item">
+                <button
+                  type="button"
+                  onClick={() => {
+                    router.push('/profile');
+                    setMenuOpen(false);
+                  }}
+                  className="topbar-menu-item"
+                >
                   <UserCircle2 size={20} strokeWidth={1.5} />
                   <span className="tipo-normal">Mi perfil</span>
-                </button>
-                <button type="button" onClick={() => setMenuOpen(false)} className="topbar-menu-item">
-                  <Settings size={20} strokeWidth={1.5} />
-                  <span className="tipo-normal">Configuración</span>
                 </button>
                 <button
                   type="button"

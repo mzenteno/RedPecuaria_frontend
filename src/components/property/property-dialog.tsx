@@ -21,7 +21,7 @@ const LocationMapPicker = dynamic(
     loading: () => (
       <div
         className="flex items-center justify-center border"
-        style={{ height: 260, borderColor: 'var(--border-input)' }}
+        style={{ height: 520, borderColor: 'var(--border-input)' }}
       >
         <span className="tipo-muted">Cargando mapa...</span>
       </div>
@@ -81,7 +81,7 @@ export function PropertyDialog({ open, mode, property, onClose, onSave }: Proper
 
   return (
     <div className="dialog-overlay">
-      <div className="dialog-panel flex flex-col gap-8">
+      <div className="dialog-panel flex flex-col gap-8" style={{ maxWidth: '64rem' }}>
         <div className="flex flex-col gap-1">
           <h2 className="tipo-titulo-seccion">{mode === 'create' ? 'Nueva propiedad' : 'Editar propiedad'}</h2>
           <p className="tipo-secundario">

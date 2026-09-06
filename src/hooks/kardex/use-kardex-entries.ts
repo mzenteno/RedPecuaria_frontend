@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   listKardexEntriesByInvestmentUseCase,
   createKardexEntryUseCase,
@@ -13,16 +13,25 @@ function kardexKey(investmentId: string) {
   return ['kardex-entries', investmentId];
 }
 
-/** El kardex es siempre de una inversión puntual — sin `investmentId` (todavía
- * no se eligió Propiedad + Inversión en los combobox de la pantalla) la
- * query queda deshabilitada, igual criterio que `useInvestments`. */
-export function useKardexEntries(investmentId: string | null) {
+/** El kardex es siempre de una inversión puntual — sin `investmentId`
+ * (todavía no se eligió Propiedad + Inversión en los combobox de la
+ * pantalla) la query queda deshabilitada, igual criterio que
+ * `useInvestments`. Paginado en el servidor (ver ARCHITECTURE.md §8/§9). */
+export function useKardexEntries(investmentId: string | null, page: number, pageSize: number, search: string) {
   const queryClient = useQueryClient();
+  const queryKey = [...kardexKey(investmentId ?? 'none'), page, pageSize, search];
 
-  const { data: entries = [], isLoading } = useQuery({
-    queryKey: investmentId ? kardexKey(investmentId) : ['kardex-entries', 'none'],
-    queryFn: () => listKardexEntriesByInvestmentUseCase.execute(investmentId as string),
+  const { data, isLoading } = useQuery({
+    queryKey,
+    queryFn: () =>
+      listKardexEntriesByInvestmentUseCase.execute({
+        investmentId: investmentId as string,
+        page,
+        pageSize,
+        search: search || undefined,
+      }),
     enabled: investmentId !== null,
+    placeholderData: keepPreviousData,
   });
 
   const invalidate = () => {
@@ -48,7 +57,9 @@ export function useKardexEntries(investmentId: string | null) {
   });
 
   return {
-    entries,
+    entries: data?.items ?? [],
+    total: data?.total ?? 0,
+    totalPages: Math.max(1, Math.ceil((data?.total ?? 0) / pageSize)),
     isLoading,
     createEntry,
     updateEntry: (id: string, data: UpdateKardexEntryData) => updateEntryMutation({ id, data }),

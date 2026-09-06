@@ -184,6 +184,13 @@ body {
     @apply text-xs mt-1;
     color: var(--danger);
   }
+  /* Contraparte de `.tipo-error` — confirmación tras guardar en una
+     pantalla sin diálogo que se cierre solo (ej. "Mi perfil"), donde no hay
+     otra señal visual de que la acción funcionó. */
+  .tipo-success {
+    @apply text-xs mt-1;
+    color: var(--primary);
+  }
   .tipo-link {
     color: var(--primary);
     @apply hover:underline;
@@ -371,14 +378,22 @@ body {
   }
   /* Tabla de datos genérica */
   .data-table {
-    @apply w-full text-sm;
+    @apply w-full text-sm border;
     min-width: 40rem;
+    border-color: var(--border-subtle);
+    /* Sin esto, cada celda suma su propio borde y las líneas entre columnas
+       (y entre encabezado y datos) salen dobles/más gruesas de lo que se
+       ve en el resto de la UI. */
+    border-collapse: collapse;
   }
   .data-table thead {
     @apply text-left;
   }
+  /* Grilla completa (no solo el borde inferior de antes) — cada celda con
+     sus 4 lados, así el encabezado también se distingue de las filas a
+     primera vista, sin depender de un color de fondo propio. */
   .data-table th {
-    @apply px-4 py-3.5 font-semibold whitespace-nowrap border-b;
+    @apply px-4 py-3.5 font-semibold whitespace-nowrap border;
     border-color: var(--border-subtle);
   }
   .data-table th:first-child {
@@ -398,7 +413,7 @@ body {
     background: var(--bg-hover);
   }
   .data-table td {
-    @apply px-4 py-4 border-b;
+    @apply px-4 py-4 border;
     border-color: var(--border-subtle);
   }
   .data-table td:first-child {

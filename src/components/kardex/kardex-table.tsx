@@ -1,9 +1,14 @@
 import { Pencil, Trash2 } from 'lucide-react';
 import type { KardexEntry } from '@/domain/kardex/kardex-entry.entity';
+import { KARDEX_MOVEMENT_TYPE_OPTIONS } from '@/domain/kardex/kardex-entry.entity';
+import type { User } from '@/domain/user/user.entity';
 import { formatDateOnly } from '@/lib/format-date';
 
 interface KardexTableProps {
   entries: KardexEntry[];
+  /** Inversionistas de la inversión activa — para mostrar el nombre en vez
+   * del id en la columna "Inversionista". */
+  investors: User[];
   loading: boolean;
   canEdit: boolean;
   canDelete: boolean;
@@ -17,7 +22,11 @@ function formatNumber(value: number): string {
   return NUMBER_FORMAT.format(value);
 }
 
-export function KardexTable({ entries, loading, canEdit, canDelete, onEdit, onDeactivate }: KardexTableProps) {
+function movementTypeLabel(movementType: KardexEntry['movementType']): string {
+  return KARDEX_MOVEMENT_TYPE_OPTIONS.find((option) => option.value === movementType)?.label ?? movementType;
+}
+
+export function KardexTable({ entries, investors, loading, canEdit, canDelete, onEdit, onDeactivate }: KardexTableProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -26,16 +35,23 @@ export function KardexTable({ entries, loading, canEdit, canDelete, onEdit, onDe
     );
   }
 
+  function investorName(investorUserId: string | null): string {
+    if (!investorUserId) return '—';
+    return investors.find((investor) => investor.id === investorUserId)?.fullName ?? '—';
+  }
+
   const showActions = canEdit || canDelete;
-  const columnCount = showActions ? 11 : 10;
+  const columnCount = showActions ? 13 : 12;
 
   return (
     <div className="data-table-wrapper">
-      <table className="data-table" style={{ minWidth: '72rem' }}>
+      <table className="data-table" style={{ minWidth: '80rem' }}>
         <thead>
           <tr>
             <th>Fecha</th>
             <th>Detalle</th>
+            <th>Tipo</th>
+            <th>Inversionista</th>
             <th className="text-right">Peso prom.</th>
             <th className="text-right">Entrada cant.</th>
             <th className="text-right">Entrada kilos</th>
@@ -52,6 +68,8 @@ export function KardexTable({ entries, loading, canEdit, canDelete, onEdit, onDe
             <tr key={entry.id}>
               <td>{formatDateOnly(entry.entryDate)}</td>
               <td>{entry.detail}</td>
+              <td>{movementTypeLabel(entry.movementType)}</td>
+              <td>{investorName(entry.investorUserId)}</td>
               <td className="text-right">{formatNumber(entry.avgWeight)}</td>
               <td className="text-right">{entry.entryQuantity}</td>
               <td className="text-right">{formatNumber(entry.entryKilos)}</td>

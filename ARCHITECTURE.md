@@ -78,6 +78,12 @@ Este documento define las reglas de arquitectura del frontend. Es el equivalente
   (si no, es casi indistinguible del blanco de `--bg-card`) pero más clara que la segunda,
   para que el hover se siga notando incluso sobre una fila par. Es una regla de `.data-table`,
   no algo que cada tabla nueva (Roles, Permisos) tenga que repetir.
+- **`.data-table` es una grilla completa** (`border` en la tabla y en cada `th`/`td`, más
+  `border-collapse: collapse` para que las líneas entre celdas no salgan dobles/más gruesas) —
+  antes solo `border-b` (línea inferior), casi indistinguible entre el encabezado y los datos a
+  simple vista. **Iteración previa, descartada**: se probó primero un fondo propio en `thead`
+  (`--bg-page`, después `--bg-hover`) en vez de bordes — el usuario prefirió bordes en toda la
+  tabla. Regla de `.data-table`, aplica a toda tabla de la app de una sola vez.
 
 ## 3. Estructura de carpetas
 
@@ -241,8 +247,10 @@ para ocultar acciones dentro de una pantalla ya construida, no solo para armar e
 - Un `204` (ej. logout) no lleva body — no se intenta parsear JSON en ese caso.
 - Cualquier error (`success: false`) se convierte en una `ApiError` con `statusCode`,
   `errorName` y `message` (si `message` es un array de `class-validator`, se unen con coma).
-- No hay manejo de paginación (`meta`) todavía en el cliente — se agrega cuando exista la
-  primera pantalla de listado que la necesite.
+- **`httpClient.getPaginated<T>()`** — variante de `get<T>()` para endpoints que devuelven
+  `meta` (`{total, page, pageSize}`) junto a `data` en la raíz del sobre; lanza si `meta` no
+  viene (protege contra usarlo en un endpoint que no pagina). Usado por `Users`, `Properties`,
+  `Investments` (las 3 variantes) y `Kardex` — ver §9 y §14.
 
 ## 7. Convenciones de nombres
 
@@ -271,13 +279,40 @@ Mismo criterio que el proyecto de referencia, que ya es coherente y vale la pena
 - **Empresas** (`app/(main)/companies`, §9), **Usuarios** (`app/(main)/users`, §10), **Roles**
   (`app/(main)/roles`, §11) y **Permisos** (`app/(main)/permissions`, §12) ya tienen pantalla —
   el módulo `auth` completo tiene su CRUD/editor en el frontend.
-- **Menú del usuario (`TopBar`)**: el token no lleva `fullName` ni el nombre real del `Role`
-  (que es por empresa, no viaja en el JWT) — así que el dropdown muestra el **email** como
-  "nombre" y una etiqueta gruesa derivada de `isSuperAdmin` ("Super Administrador" / "Usuario")
-  como "rol", no el nombre real del rol asignado. Los ítems "Mi perfil" y "Configuración" no
-  navegan a ningún lado todavía (no existen esas pantallas) — solo cierran el menú, igual que
-  hace el proyecto de referencia con los suyos. Los íconos de buscar/notificaciones son
-  decorativos, sin funcionalidad (tampoco la tienen en la referencia).
+- **Menú del usuario (`TopBar`)**: usa los 3 datos de identidad que trae el JWT (`username`,
+  `fullName`, `email` — ver `docs/auth-sessions/auth-sessions.md` del backend) en 3 lugares
+  distintos: el trigger (afuera del dropdown, con el avatar) y las iniciales muestran
+  `username` (con el que la persona se loguea); el header del dropdown, ya abierto, muestra el
+  **nombre real** (`fullName`) arriba y el **email** debajo. No hay una línea de "rol" (el
+  nombre real del `Role` es por empresa, no viaja en el JWT). `username`/`fullName` pueden
+  faltar en una sesión ya abierta antes de este cambio (el token no se reemite hasta el próximo
+  login/refresh) — el email queda de respaldo. **"Mi perfil"** navega a `app/(main)/profile`
+  (ver abajo). Sin ítem "Configuración" — se quitó por no navegar a ningún lado (no existe esa
+  pantalla), en vez de dejarlo como acción decorativa. Los íconos de buscar/notificaciones sí
+  quedan decorativos, sin funcionalidad (tampoco la tienen en la referencia) — esos no se
+  quitaron, a diferencia de "Configuración".
+
+### "Mi perfil" — acción sobre uno mismo, no un módulo de negocio
+
+`app/(main)/profile` — a diferencia de todo lo demás en `(main)`, **sin `RequirePermission`**
+(mismo criterio que `/dashboard`, §8): no es un módulo con permiso por rol, es algo que
+cualquier usuario logueado puede hacer sobre su propia cuenta. Dos tarjetas, cada una con su
+propio `useMutation` (`hooks/user/use-my-profile.ts`):
+
+- **Datos personales** (`email`/`fullName`): reusa el mismo `PATCH /users/:id` que
+  `app/(main)/users` — el "id" acá es siempre el del propio usuario logueado
+  (`getUserId()` de `session-storage`), no uno elegido por un admin en una tabla. `username`
+  se muestra pero no se puede editar, igual que en el diálogo de edición de Usuarios — no hay
+  ningún flujo para eso todavía, ni acá ni allá.
+- **Cambiar contraseña**: `PATCH /users/me/password` (nuevo endpoint, exige la contraseña
+  actual) — ver `docs/user/user.md` del backend para el detalle de por qué esta acción SÍ
+  necesitó una ruta propia en vez de reusar algo existente.
+
+**`username`/`fullName`/`email` arrancan del token decodificado** (mismo criterio que
+`TopBar` — no hay un `GET /users/:id` para traerlos frescos de la base), pero tras guardar
+"Datos personales" con éxito, se actualizan con la respuesta real del `PATCH` (un `User`
+completo), no con el token — el token queda desactualizado hasta el próximo login/refresh (ver
+arriba), así que sin esto la pantalla mostraría el nombre viejo justo después de guardarlo.
 
 ## 9. CRUD de Empresas — patrón para los próximos CRUD (Usuarios, Roles, Permisos)
 
@@ -292,15 +327,25 @@ con la marca). El CRUD de Empresas replica la arquitectura pero corrige esos pun
   `application/company/*.use-case.impl.ts` (pass-through, mismo criterio que `LoginUseCaseImpl`),
   `infrastructure/repositories/company/company.repository.impl.ts`,
   `infrastructure/di/company.container.ts`, `hooks/company/use-companies.ts` (React Query).
-- **Sin paginación en el backend, a propósito**: a diferencia de `GET /users` (paginado),
-  "empresas" son inquilinos del sistema — se espera un puñado por mucho tiempo, `GET
-  /companies` trae todas las activas de una. Reevaluar si esto deja de ser cierto.
+- **Sin paginación en el backend, a propósito — pero es la EXCEPCIÓN, no la regla por
+  defecto**: **Empresas, Roles y Permisos son los únicos 3 listados que quedan en paginación de
+  cliente** (catálogos chicos, se espera un puñado por mucho tiempo — `GET /companies` trae
+  todas las activas de una). **Todo lo demás debe paginar en el servidor**, sea cual sea el
+  volumen esperado hoy — no es una decisión caso por caso que cada módulo nuevo repita "tiene
+  pocos registros, no hace falta". `useProperties()` y `useMyInvestments()` habían copiado ese
+  razonamiento por error (comentarios que decían "mismo criterio que `useCompanies`/`useRoles`")
+  — ya corregido: Propiedades, Inversiones (las 3 variantes: por gestión, por inversionista,
+  "mías") y Kardex paginan en el servidor con el mismo patrón que `Users` (§10). Cada uno de
+  esos módulos, además, expone un hook aparte "de opciones" sin paginar (`usePropertyOptions()`,
+  `useInvestorUsers()`) para los combobox que necesitan la lista completa (hasta 100
+  registros) en vez de una página — paginar ahí rompería el combo, no tendría sentido elegir
+  "página 2" dentro de un `<select>`.
 - **Paginación 100% del lado del cliente** (`hooks/use-client-pagination.ts` +
-  `components/ui/pagination.tsx`): la tabla igual no muestra todo de una — corta el array ya
-  descargado (10 por página) y filtra por nombre antes de paginar (buscar y no encontrar nada
-  en la página 3 sería confuso). Este hook es para listados que el backend **no** pagina; si
-  un listado empieza a pesar de verdad, hay que pasarlo a paginación real de servidor (como
-  `Users`), no forzar más este patrón.
+  `components/ui/pagination.tsx`) — **solo para Empresas, Roles y Permisos**: la tabla igual no
+  muestra todo de una — corta el array ya descargado (10 por página) y filtra por nombre antes
+  de paginar (buscar y no encontrar nada en la página 3 sería confuso). Si un listado nuevo cree
+  que "tiene pocos registros" es motivo para usar este hook en vez de paginación real de
+  servidor (como `Users`), la respuesta por defecto es que no — salvo que sea uno de esos 3.
 - **"Desactivar", no "eliminar"**: `Company` no tiene soft-delete, solo `isDeleted` — no hay
   columna "Estado" en la tabla porque el backend ya filtra a solo activas.
 - **Pendiente: no hay forma de reactivar una empresa** — el backend solo tiene
@@ -360,7 +405,18 @@ por pedido explícito ("acá sí se debe paginar en el servidor"):
   combo — inyecta solo una opción vacía `disabled hidden` con el texto de placeholder (así no
   aparece como un renglón más al abrir el combo), y usa `required` + `:invalid` en CSS
   (`globals.css`) para pintarla del mismo gris que `Input::placeholder` mientras no se elija
-  nada.
+  nada. **Ningún combo del proyecto ofrece una opción explícita de "Todos"/"Todas"** (regla
+  general, no algo puntual de una pantalla) — cuando un combo es un filtro opcional, dejarlo sin
+  elegir ya significa "sin filtro", no hace falta un renglón aparte para decirlo (ej.
+  "Propiedad" en `app/(main)/investments`, §14: sin elegir, el filtro de propiedad no se aplica).
+- **`Select` con `onClear`**: como la opción placeholder es `disabled hidden`, una vez elegido
+  un valor real no hay forma nativa de volver a ella desde el `<select>` abierto (no aparece en
+  la lista) — un problema real para un combo que actúa como **filtro** (a diferencia de un
+  campo obligatorio de alta/edición, donde nunca hace falta "deshacer" la elección). `onClear`
+  (prop opcional) agrega un botón "×" que solo se muestra cuando ya hay un valor elegido —
+  vuelve el combo a "sin elegir" sin reintroducir una opción "Todos"/"Todas" dentro de la
+  lista. Se pasa solo en combos-filtro (ej. los tres de `app/(main)/investments`, §14); un
+  campo requerido de un diálogo (`UserDialog`, `CompanyDialog`) simplemente no lo recibe.
 - **La edición SÍ permite tocar `userTypeId`/`roleId`, no solo `email`/`fullName`**: son 2
   llamadas separadas del `PATCH /users/:id` genérico (`changeUserTypeUseCase`,
   `changeUserRoleUseCase` — endpoints que ya existían en el backend pero no estaban
@@ -431,12 +487,21 @@ molde de `PageToolbar` + diálogo + `ConfirmDialog` hubiera sido peor que no reu
 
 Cierra el módulo `auth` y arranca el negocio en sí (fincas, inversiones, kardex — ver
 `docs/property/property.md` y `docs/investment/investment.md` del backend). Mismo patrón que
-Empresas (paginación de cliente, confirmación genérica), con un campo nuevo: ubicación.
+Empresas (confirmación genérica), con un campo nuevo (ubicación) y una diferencia real:
+**paginación de servidor**, no de cliente (§8/§9) — `useProperties(page, pageSize, search)`
+para la pantalla CRUD, con debounce de 300ms en el buscador (mismo patrón que `Users`, §10).
+Los combobox de Propiedad en Inversiones/Kardex no usan ese hook — usan
+`usePropertyOptions()` (hasta 100 registros de una, sin paginar), porque un combo no puede
+"pasar de página".
 
 - **`components/property/location-map-picker.tsx`** — Leaflet + OpenStreetMap, **sin API key
   ni cuenta de Google** (decisión explícita del usuario, ver el hilo de diseño): clic en el
   mapa mueve el marcador y reporta lat/lng. "Ver en Google Maps" (tabla y diálogo) es solo un
-  link (`google.com/maps?q=lat,lng`), nunca un embed de Google.
+  link (`google.com/maps?q=lat,lng`), nunca un embed de Google. Mapa de 520px de alto (antes
+  260px) con zoom inicial 15 (antes 13, casi a nivel de calle), y `PropertyDialog` ensancha el
+  panel a `64rem` (el resto de los diálogos usa el `max-w-md` por defecto de `.dialog-panel`,
+  28rem) — el usuario encontró que la versión chica no daba suficiente precisión para marcar la
+  ubicación con el mouse.
 - **`next/dynamic` con `ssr: false`** en `PropertyDialog` para cargar el mapa — `leaflet` toca
   `window` al cargar el módulo (no solo al renderizar), lo que rompe el bundle de servidor de
   Next aunque el diálogo nunca se renderice de verdad ahí (problema clásico y documentado de
@@ -448,27 +513,112 @@ Empresas (paginación de cliente, confirmación genérica), con un campo nuevo: 
 
 ## 14. Inversiones + Kardex — pantallas hermanas, cada una con su propio permiso
 
-- **`app/(main)/investments`**: selector de "Propiedad" arriba (igual patrón que "Rol" en
-  Permisos, §12) — sin propiedad elegida, la tabla ni se pide. El diálogo tiene un combobox de
-  "Gestión" (años, generados en runtime: año que viene hasta 6 para atrás) y un checklist de
-  Inversionistas (`useInvestorUsers()`, filtra por tipo de usuario del lado del cliente —
-  trae hasta 100 usuarios de la empresa activa y se queda con los de tipo Inversionista; si
-  una empresa llega a tener más que eso hay que pasar esto a un filtro real de servidor, no
-  está hecho todavía).
+- **`app/(main)/investments`**: tres filtros, **ninguno con una opción "Todos"/"Todas"** (regla
+  general de todo el proyecto, ver arriba), **y los tres son formas independientes de disparar
+  la consulta** — cualquiera de los tres alcanza por sí solo, ninguno depende de los otros dos.
+  `activeMode` (`'gestion' | 'investor' | 'property' | null`) decide cuál de los tres hooks
+  (`useInvestmentsByGestion`/`useInvestmentsByInvestor`/`useInvestmentsByProperty`, los tres
+  paginados en el servidor, §8/§9) provee los datos y las mutaciones (create/update/deactivate)
+  que realmente se usan — sin ninguno de los tres elegido, la tabla ni se pide. La prioridad
+  (Gestión > Inversionista > Propiedad, en ese orden) solo decide cuál dispara la consulta
+  cuando hay más de uno elegido a la vez — los otros dos, ahí, viajan como parámetro extra de
+  esa misma consulta de servidor (ej. con "Gestión" elegida, "Inversionista" viaja como
+  `investorUserId` — sirve para "inversiones de tal inversionista en tal gestión"), nunca como
+  `.filter()` sobre la página ya traída: con paginación real, filtrar solo lo ya descargado daría
+  resultados incompletos o directamente vacíos si el match está en otra página. Cada uno de los
+  tres `Select` recibe `onClear` (ver arriba) para poder volver a "sin elegir" y dejar de aplicar
+  ese filtro — antes de esto, una vez elegido un valor no había forma de deshacerlo desde el
+  combo (la opción placeholder es `disabled hidden`), y "Propiedad" sola no disparaba nada
+  (**corregido** — antes solo Gestión/Inversionista podían ser el modo activo). Cambiar
+  cualquiera de los tres filtros resetea la página a 1
+  (`handleGestionChange`/`handlePropertyChange`/`handleInvestorChange`) — quedarse en, digamos,
+  la página 3 de un resultado que ahora tiene 1 sola página mostraría la tabla vacía con un
+  `<Pagination>` roto. Como la tabla puede mostrar
+  inversiones de varias propiedades a la vez, `InvestmentTable` agrega la columna "Propiedad" —
+  y por eso también necesita su propio `style={{ minWidth: '64rem' }}` en el `<table>` (mismo
+  patrón que `KardexTable`), en vez de conformarse con el `min-width: 40rem` genérico de
+  `.data-table`: con 6 columnas (una más que antes) y una de ellas con una lista de nombres sin
+  `nowrap`, 40rem ya no alcanzaba — el navegador comprimía/envolvía el texto de las celdas en
+  vez de dejar que `.data-table-wrapper` hiciera scroll horizontal.
+- **La fila de filtros usa `grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3`, no
+  `flex flex-wrap` + `max-w-xs w-full` por combo** (que sí alcanza en pantallas con 1-2 filtros,
+  como Permisos o el `investments` original) — con 3 filtros, ese patrón dejaba cada combo fijo
+  en 320px (`max-w-xs`) sin importar cuánto sobrara al lado, un hueco vacío bien visible en
+  anchos intermedios (ni tan angosto como para apilar 1 por fila, ni tan ancho como para que 3
+  de 320px llenaran la fila). Con la grilla, cada combo ocupa el 100% de su columna en cualquier
+  ancho — verificado con Playwright (viewport angosto, contra una copia efímera del frontend)
+  en los mismos anchos exactos que reportó el usuario (894px, 636px, 390px): sin hueco en
+  ninguno de los tres.
+  "Nueva inversión" solo se ofrece con una Propiedad puntual elegida
+  (`onNew={canCreate && propertyId ? ... : undefined}`) — crear necesita saber a qué propiedad
+  va, sea cual sea `activeMode`. El diálogo tiene el combobox de "Gestión" y un checklist de
+  Inversionistas (`useInvestorUsers()`, filtra por tipo de usuario del lado del cliente — trae
+  hasta 100 usuarios de la empresa activa y se queda con los de tipo Inversionista; si una
+  empresa llega a tener más que eso hay que pasar esto a un filtro real de servidor, no está
+  hecho todavía).
+  **Iteración previa, descartada**: "Propiedad" era el único filtro y el que disparaba la
+  consulta (`GET /investments?propertyId=`, que sigue existiendo — lo usa el atajo "Ver kardex"
+  de la tabla) — el usuario pidió primero agregar "Gestión" como filtro adicional, después
+  aclaró que en realidad quería invertir los roles del todo.
 - **`app/(main)/kardex`**: pantalla propia del sidebar, hermana de Propiedades e Inversiones
   bajo el grupo "Inversiones" — **no** un drill-down por ruta dinámica. Usa `menuKey="kardex"`,
   distinto de `"investments"`, con sus 4 flags de permiso independientes (permite dar "puede
   crear inversiones pero no tocar el kardex", o al revés, a un rol — ver `docs/menu/menu.md`
-  del backend). Elige "Propiedad" y luego "Inversión" con dos combobox propios (el segundo
-  depende del primero, mismo patrón `useInvestments(propertyId)` que usa `investments`). El
-  botón "Ver kardex" de la tabla de Inversiones sigue existiendo como atajo — navega a
-  `/kardex?propertyId=&investmentId=` para preseleccionar ambos combobox (`useState(() =>
-  searchParams.get(...))`, lazy init) — y solo se muestra si el rol tiene `canView` sobre
-  `kardex` (`InvestmentTable` recibe `canViewKardex` como prop separada de `canEdit`/`canDelete`).
+  del backend).
   **Iteración previa, descartada**: se probó primero un menú `kardex` invisible
-  (`showInSidebar: false`, colgado de `investments`, alcanzable solo por ese botón) — el usuario
-  aclaró que necesitaba que fuera una pantalla real del sidebar, porque un rol sin acceso a
-  Inversiones no tenía ninguna forma de *llegar* al botón que lo llevaba a Kardex.
+  (`showInSidebar: false`, colgado de `investments`, alcanzable solo por un botón en la tabla de
+  Inversiones) — el usuario aclaró que necesitaba que fuera una pantalla real del sidebar,
+  porque un rol sin acceso a Inversiones no tenía ninguna forma de *llegar* a ese botón.
+- **"Mis inversiones" (lista, no combobox) reemplazó al selector de Propiedad**: sin ninguna
+  inversión elegida, `useMyInvestments()` (`GET /investments/mine`, `userId` siempre de la
+  sesión) trae las inversiones donde el usuario logueado es inversionista, de cualquier
+  propiedad, y se muestran como filas clickeables de una tabla — clic en una entra a su kardex.
+  El botón "Ver kardex" de la tabla de Inversiones (`InvestmentTable`, prop `canViewKardex`
+  separada de `canEdit`/`canDelete`) sigue navegando a `/kardex?propertyId=&investmentId=`, como
+  atajo para quien administra inversiones pero no es necesariamente inversionista de ninguna —
+  esa combinación se resuelve con un segundo hook, `useInvestments(shortcutPropertyId)`, en
+  paralelo a `useMyInvestments()`; cuál de los dos resolvió la inversión elegida es invisible
+  para el resto de la pantalla (`selectedInvestment` prueba una lista y después la otra).
+  **Iteración previa, descartada**: se probó primero elegir "Propiedad" y luego "Inversión" con
+  dos combobox (mismo patrón que `investments`) — el usuario aclaró que el primer filtro debía
+  ser directamente las inversiones del usuario logueado, no una propiedad.
+- **Dos tablas, dos paginaciones de servidor independientes, mismo patrón que `Users` (§10)**:
+  "Mis inversiones" (`useMyInvestments(page, pageSize)`, `MY_INVESTMENTS_PAGE_SIZE = 10`) y,
+  una vez elegida una inversión, la tabla de movimientos del kardex
+  (`useKardexEntries(investmentId, page, pageSize, search)`, `ENTRIES_PAGE_SIZE = 20`, búsqueda
+  server-side por `detail` con el mismo debounce de 300ms que `Properties`/`Users`) — cada una
+  con su propio estado de página (`myInvestmentsPage`/`entriesPage`) y su propio
+  `<Pagination>`, porque son listados independientes en la misma pantalla, no una tabla adentro
+  de la otra.
+- **Llegar a `/kardex` por el atajo de Inversiones no debe "sacarte" de Inversiones**: aunque la
+  URL cambia a `/kardex`, el botón de "Volver" dice **"Volver a Inversiones"** (no "Volver a Mis
+  inversiones") y navega a `/investments` — y el sidebar sigue resaltando el ítem "Inversiones",
+  no "Kardex". La señal para distinguir los dos orígenes es la presencia de `propertyId` en la
+  URL (`shortcutPropertyId` en `kardex/page.tsx`, `searchParams.has('propertyId')` en
+  `sidebar.tsx`) — entrando directo desde el ítem "Kardex" del sidebar no hay `propertyId`, así
+  que ahí sí se resalta "Kardex" y el botón dice "Volver a Mis inversiones", normal.
+  **Caso especial reconocido a propósito**: `sidebar.tsx` es genérico (recorre el árbol que
+  manda el backend sin conocer claves puntuales, salvo para el ícono — `menu-icon.tsx` ya rompe
+  esa genericidad de la misma forma) — acá también hardcodea `node.key === 'investments'`/
+  `'kardex'` para esta única excepción, comentado en el código como tal.
+- **"Volver a Inversiones" reconstruye los filtros que estaban activos, no solo la ruta**:
+  `investments/page.tsx` inicializa `gestion`/`propertyId` leyendo `useSearchParams()` (lazy
+  init, mismo patrón que `kardex/page.tsx`), y "Ver kardex" manda esos mismos valores en la URL
+  de destino (`/kardex?propertyId=&investmentId=&gestion=`) — `shortcutGestion` en
+  `kardex/page.tsx` no se usa para nada más que devolverlo tal cual al armar el link de "Volver".
+  Sin esto, volver a `/investments` remonta el componente de cero y los combos se ven vacíos —
+  un `router.push` entre rutas distintas no preserva el `useState` local de la pantalla anterior,
+  aunque conceptualmente sea "la misma pantalla de la que veniamos".
+- **Al revés: cambiar el query string de la MISMA ruta NO remonta el componente**, y por eso
+  `KardexPage`/`InvestmentsPage` (los `export default`, no el `...Content` de adentro) le pasan
+  `key={searchParams.toString()}` a su respectivo `...PageContent`. Sin esto: entrar a
+  `/kardex?propertyId=&investmentId=&gestion=` (atajo) y después hacer clic directo en el ítem
+  "Kardex" del sidebar (`/kardex`, sin query params) deja la pantalla mostrando lo mismo de
+  antes — Next trata ambas URLs como la misma página y solo re-renderiza, no remonta, así que
+  los `useState(() => searchParams.get(...))` con inicialización perezosa nunca vuelven a leer
+  la URL nueva. La `key` fuerza un remount real cada vez que cambia el query string de esa ruta,
+  reseteando todo el estado local — mismo mecanismo que usa React para "reiniciar" un formulario
+  al cambiar de ítem (ver `dialog.sessionId` en los diálogos de alta/edición, §9).
 - **"Inversiones" es ahora también el nombre del grupo del sidebar** (`investment-management`)
   que contiene a "Propiedades", "Inversiones" y "Kardex" — mismo patrón que "Administración"
   agrupando Empresas/Usuarios/Roles/Permisos (§9-§12). La repetición del nombre (grupo e ítem
@@ -487,3 +637,34 @@ Empresas (paginación de cliente, confirmación genérica), con un campo nuevo: 
   como medianoche UTC, y en un huso horario negativo (Bolivia, UTC-4) se lee un día antes.
   `formatDateOnly` (`lib/format-date.ts`) parsea el string directo, sin ningún `Date` de por
   medio — verificado en vivo (17/3/2025 se mostró como `17/03/2025`, no `16/03/2025`).
+
+## 15. Dashboard — distinto por tipo de usuario, no un módulo de negocio más
+
+`app/(main)/dashboard` es el destino fijo del login (`use-login.ts`) y el fallback de
+`RequirePermission` — por eso, a diferencia de todo lo demás en `(main)`, **sin
+`RequirePermission`** (mismo criterio que `/profile`, §8): tiene que mostrar algo para
+cualquiera con sesión, sea cual sea su rol.
+
+- **`useIsInvestor()`** (`hooks/menu/use-is-investor.ts`, nuevo — mismo patrón exacto que
+  `useIsSuperAdmin()`: lee `isInvestor` del token decodificado, `useState` perezoso sin efecto)
+  decide cuál de dos sub-componentes renderiza la página: `InvestorDashboard` o
+  `AdminDashboard`. Ambos viven en el mismo `page.tsx`, no en archivos separados — es la misma
+  pantalla con dos contenidos posibles, no dos rutas.
+- **`InvestorDashboard`**: 2 tarjetas KPI (inversiones activas, total recibido en ventas) +
+  tabla "Mis inversiones" (`useInvestorDashboard()`, `GET /dashboard/investor-summary`).
+- **`AdminDashboard`**: 4 tarjetas KPI + "Top inversionistas" + tabla "Últimos movimientos"
+  (`useAdminDashboard()`, `GET /dashboard/admin-summary`) — agregados de la empresa activa,
+  igual criterio que el resto de la app (nunca de todas las empresas, ni para un Super
+  Administrador).
+- **Ninguna tarjeta usa `KardexEntry.total` sin acotar a `movementType === 'venta'`** — ese
+  campo no tiene una fórmula definida todavía (ver `docs/investment/investment.md` del
+  backend), así que no hay "capital invertido" ni "ganancia" en ningún lado, solo "total
+  recibido/registrado en ventas" (el único cálculo de dinero con significado real hoy) y
+  conteos simples. Ver `docs/dashboard/dashboard.md` del backend para el detalle completo.
+- **"Top inversionistas" y "Últimos movimientos" van apiladas, no lado a lado
+  (`grid-cols-2`)**: la tabla de movimientos tiene 4 columnas (fecha, propiedad/inversión,
+  detalle, total) — a la mitad del ancho, la columna "Total" quedaba fuera de la vista sin
+  scrollear (verificado con Playwright contra una copia efímera del frontend).
+- **Reemplaza al dashboard con datos 100% hardcodeados** (`mockMeses`,
+  `mockTopInversionistas`, `mockLotesEnAlerta`) que no llamaba a ningún endpoint — se mantuvo
+  el mismo lenguaje visual de tarjetas KPI para las nuevas, con datos reales.

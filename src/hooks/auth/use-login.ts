@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import { loginUseCase } from '@/infrastructure/di/auth.container';
 import { saveSession } from '@/infrastructure/http/session-storage';
 import { ApiError } from '@/infrastructure/http/http-client';
@@ -9,6 +10,7 @@ import type { CompanyChoice, LoginCredentials } from '@/domain/auth/auth.entity'
 
 export function useLogin() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [companyChoices, setCompanyChoices] = useState<CompanyChoice[] | null>(null);
@@ -22,6 +24,10 @@ export function useLogin() {
     try {
       const session = await loginUseCase.execute(credentials);
       saveSession(session);
+      // Defensa extra además del `clear()` de "Cerrar sesión" (topbar.tsx):
+      // si se llega a /login sin haber pasado por ese botón (otra pestaña,
+      // "atrás" del navegador), esto evita heredar cache de la sesión previa.
+      queryClient.clear();
       router.push('/dashboard');
     } catch (err) {
       if (err instanceof ApiError && err.errorName === 'CompanySelectionRequiredException') {

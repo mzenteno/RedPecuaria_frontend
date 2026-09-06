@@ -1,5 +1,5 @@
 import type { UserRepository } from '@/domain/user/user.repository';
-import type { User, CreateUserData, UpdateUserData } from '@/domain/user/user.entity';
+import type { User, CreateUserData, UpdateUserData, ChangePasswordData } from '@/domain/user/user.entity';
 import type { PaginatedResult, PaginationParams } from '@/domain/common/paginated-result';
 import { httpClient } from '../../http/http-client';
 
@@ -39,5 +39,9 @@ export class UserRepositoryImpl implements UserRepository {
 
   async changeUserType(id: string, userTypeId: string): Promise<void> {
     await httpClient.patch<void>(`/users/${id}/user-type`, { userTypeId });
+  }
+
+  async changeOwnPassword(data: ChangePasswordData): Promise<void> {
+    await httpClient.patch<void>('/users/me/password', data);
   }
 }

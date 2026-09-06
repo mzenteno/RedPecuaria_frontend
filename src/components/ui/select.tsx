@@ -1,5 +1,5 @@
 import { forwardRef, type SelectHTMLAttributes } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, X } from 'lucide-react';
 
 interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   label?: string;
@@ -12,6 +12,18 @@ interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
    * que no necesita este estado (ej. `CompanySelectDialog`, que siempre
    * arranca con una opción real seleccionada). */
   placeholder?: string | null;
+  /** Botón "×" para volver el combo a "sin elegir" — solo tiene sentido en
+   * un combo que actúa como FILTRO opcional (ej. la fila de filtros de
+   * `app/(main)/investments`), nunca en un campo obligatorio de un
+   * formulario de alta/edición (ahí simplemente no se pasa esta prop). Se
+   * muestra solo cuando ya hay un valor real elegido — sin volver a
+   * ofrecer una opción "Todos"/"Todas" dentro de la lista (regla general
+   * del proyecto, ver `frontend/ARCHITECTURE.md` §10): es una forma de
+   * deshacer la elección, no un renglón más del combo. Hace falta esto
+   * porque la opción placeholder es `disabled hidden` — una vez elegido
+   * un valor real, no hay forma nativa de volver a ella desde el `<select>`
+   * abierto. */
+  onClear?: () => void;
 }
 
 /**
@@ -21,9 +33,10 @@ interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
  * empresa y rol).
  */
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
-  { label, error, placeholder = 'Selecciona un valor', className = '', id, children, ...props },
+  { label, error, placeholder = 'Selecciona un valor', onClear, className = '', id, children, ...props },
   ref,
 ) {
+  const showClear = Boolean(onClear) && props.value !== undefined && props.value !== '';
   return (
     <div>
       {label && (
@@ -36,7 +49,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
           ref={ref}
           id={id}
           required={placeholder !== null}
-          className={`form-input w-full appearance-none pr-10 ${error ? 'form-input-error' : ''} ${className}`}
+          className={`form-input w-full appearance-none ${onClear ? 'pr-16' : 'pr-10'} ${error ? 'form-input-error' : ''} ${className}`}
           {...props}
         >
           {placeholder !== null && (
@@ -46,6 +59,17 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
           )}
           {children}
         </select>
+        {showClear && (
+          <button
+            type="button"
+            onClick={onClear}
+            aria-label="Limpiar selección"
+            className="absolute right-8 top-1/2 -translate-y-1/2 hover:opacity-70"
+            style={{ color: 'var(--text-muted)' }}
+          >
+            <X size={16} />
+          </button>
+        )}
         <ChevronDown
           size={18}
           className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2"
