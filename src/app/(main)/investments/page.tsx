@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Plus } from 'lucide-react';
 import { usePropertyOptions } from '@/hooks/property/use-property-options';
@@ -58,14 +58,17 @@ function InvestmentsPageContent() {
   const { canCreate, canEdit, canDelete } = usePermission(MENU_KEY);
   const { canView: canViewKardex } = usePermission('kardex');
   // Preseleccionados si se vuelve del kardex por "Volver a Inversiones" —
-  // ese link manda los mismos filtros que estaban activos cuando se hizo
-  // clic en "Ver kardex" (`kardex/page.tsx`), para no perderlos.
+  // ese link manda EXACTAMENTE los mismos filtros (y la misma página/
+  // búsqueda) que estaban activos cuando se hizo clic en "Ver kardex"
+  // (`kardex/page.tsx`), con estos mismos nombres de parámetro, para no
+  // perder nada ni "adivinar" un filtro nuevo a partir de la inversión
+  // puntual que se abrió.
   const [gestion, setGestion] = useState<string>(() => searchParams.get('gestion') ?? '');
   const [propertyId, setPropertyId] = useState<string | null>(() => searchParams.get('propertyId'));
-  const [investorUserId, setInvestorUserId] = useState<string | null>(null);
-  const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
+  const [investorUserId, setInvestorUserId] = useState<string | null>(() => searchParams.get('investorUserId'));
+  const [searchInput, setSearchInput] = useState(() => searchParams.get('search') ?? '');
+  const [search, setSearch] = useState(() => searchParams.get('search') ?? '');
+  const [page, setPage] = useState(() => Number(searchParams.get('page') ?? '1'));
   const [dialog, setDialog] = useState<DialogState>({
     open: false,
     mode: 'create',
@@ -77,8 +80,15 @@ function InvestmentsPageContent() {
 
   // Búsqueda de servidor: como el listado pagina de verdad, un filtro que
   // solo mirara la página ya descargada sería engañoso — el debounce evita
-  // mandar un request por letra.
+  // mandar un request por letra. Se salta el primer disparo (montaje): sin
+  // esto, `page` restaurado desde la URL (arriba) se pisaba solo a 1 apenas
+  // cargaba la pantalla, aunque el usuario no haya tocado el buscador.
+  const isFirstSearchEffect = useRef(true);
   useEffect(() => {
+    if (isFirstSearchEffect.current) {
+      isFirstSearchEffect.current = false;
+      return;
+    }
     const timer = setTimeout(() => {
       setSearch(searchInput);
       setPage(1);
@@ -157,6 +167,27 @@ function InvestmentsPageContent() {
     activeMode === 'investor' ? byInvestor : activeMode === 'property' ? byProperty : byGestion;
   const { investors } = useInvestorUsers();
 
+  /** `investmentId`/`investmentPropertyId` son para que `kardex/page.tsx`
+   * resuelva ESA inversión puntual (no hay `GET /investments/:id`, busca
+   * dentro de las de su propiedad) — el resto (`gestion`/`propertyId`/
+   * `investorUserId`/`search`/`page`) son los filtros que tiene ESTA
+   * pantalla ahora mismo, para que "Volver a Inversiones" los reconstruya
+   * tal cual, sin inventar un filtro de Propiedad a partir de la inversión
+   * que se abrió (bug real: antes pasaba `investment.propertyId` como si
+   * fuera el filtro de Propiedad de la pantalla, aunque no hubiera ninguno
+   * elegido). */
+  function buildKardexShortcutQuery(investment: Investment): string {
+    const params = new URLSearchParams();
+    params.set('investmentId', investment.id);
+    params.set('investmentPropertyId', investment.propertyId);
+    if (gestion) params.set('gestion', gestion);
+    if (propertyId) params.set('propertyId', propertyId);
+    if (investorUserId) params.set('investorUserId', investorUserId);
+    if (search) params.set('search', search);
+    if (page > 1) params.set('page', String(page));
+    return params.toString();
+  }
+
   function openCreate(): void {
     setDialog((prev) => ({ open: true, mode: 'create', investment: null, sessionId: prev.sessionId + 1 }));
   }
@@ -174,9 +205,14 @@ function InvestmentsPageContent() {
     gestion: number;
     description: string;
     investorUserIds: string[];
+    isFinished: boolean;
   }): Promise<void> {
     if (dialog.mode === 'create') {
-      await createInvestment(data);
+      // Una inversión recién creada siempre arranca activa — `isFinished`
+      // ni siquiera existe en `CreateInvestmentData` (el diálogo lo manda
+      // igual porque comparte el mismo formulario, pero acá se descarta).
+      const { propertyId, gestion, description, investorUserIds } = data;
+      await createInvestment({ propertyId, gestion, description, investorUserIds });
     } else if (dialog.investment) {
       await updateInvestment(dialog.investment.id, data);
     }
@@ -269,11 +305,7 @@ function InvestmentsPageContent() {
               canViewKardex={canViewKardex}
               onEdit={openEdit}
               onDeactivate={setPendingDeactivate}
-              onViewKardex={(investment) =>
-                router.push(
-                  `/kardex?propertyId=${investment.propertyId}&investmentId=${investment.id}&gestion=${gestion}`,
-                )
-              }
+              onViewKardex={(investment) => router.push(`/kardex?${buildKardexShortcutQuery(investment)}`)}
             />
             <Pagination page={page} pageSize={PAGE_SIZE} total={total} totalPages={totalPages} onPageChange={setPage} />
           </>

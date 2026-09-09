@@ -21,6 +21,9 @@ const investmentSchema = z.object({
   propertyId: z.string().min(1, 'Selecciona una propiedad'),
   gestion: z.string().min(1, 'Selecciona una gestión'),
   description: z.string().min(1, 'La descripción es obligatoria'),
+  // 'false'/'true' como string (mismo criterio que `gestion`) — solo se
+  // muestra/edita en modo edición, ver el combo "Estado" más abajo.
+  isFinished: z.string(),
 });
 
 type InvestmentFormData = z.infer<typeof investmentSchema>;
@@ -40,6 +43,7 @@ interface InvestmentDialogProps {
     gestion: number;
     description: string;
     investorUserIds: string[];
+    isFinished: boolean;
   }) => Promise<void>;
 }
 
@@ -53,6 +57,12 @@ interface InvestmentDialogProps {
  * regla de negocio que impida "mudar" una inversión a otra propiedad de la
  * misma empresa (`UpdateInvestmentUseCase` valida que la nueva propiedad
  * sea de la empresa activa).
+ *
+ * "Estado" (Activa/Terminada) solo se muestra en edición — una inversión
+ * recién creada siempre arranca activa, no tiene sentido elegirlo al
+ * alta. Es una elección manual del usuario, no se deriva del saldo: la
+ * idea de uso es marcarla como Terminada cuando `balanceQuantity` llegue a
+ * 0, pero nada lo fuerza (ver docs/investment/investment.md del backend).
  */
 export function InvestmentDialog({
   open,
@@ -77,6 +87,9 @@ export function InvestmentDialog({
       propertyId: mode === 'edit' && investment ? investment.propertyId : (defaultPropertyId ?? ''),
       gestion: mode === 'edit' && investment ? String(investment.gestion) : '',
       description: mode === 'edit' ? (investment?.description ?? '') : '',
+      // Una inversión recién creada siempre arranca activa — el combo
+      // "Estado" ni se muestra en modo alta.
+      isFinished: mode === 'edit' && investment ? String(investment.isFinished) : 'false',
     },
   });
 
@@ -97,6 +110,7 @@ export function InvestmentDialog({
         gestion: Number(data.gestion),
         description: data.description,
         investorUserIds: investorIds,
+        isFinished: data.isFinished === 'true',
       });
       onClose();
     } catch (err) {
@@ -148,6 +162,13 @@ export function InvestmentDialog({
               error={errors.description?.message}
               {...register('description')}
             />
+
+            {mode === 'edit' && (
+              <Select label="Estado" error={errors.isFinished?.message} {...register('isFinished')}>
+                <option value="false">Activa</option>
+                <option value="true">Terminada</option>
+              </Select>
+            )}
 
             <div className="flex flex-col gap-1">
               <label className="tipo-label">Inversionistas</label>

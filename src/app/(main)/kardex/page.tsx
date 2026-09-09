@@ -2,21 +2,25 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Download } from 'lucide-react';
 import { usePropertyOptions } from '@/hooks/property/use-property-options';
 import { useInvestments } from '@/hooks/investment/use-investments';
 import { useMyInvestments } from '@/hooks/investment/use-my-investments';
 import { useKardexEntries } from '@/hooks/kardex/use-kardex-entries';
 import { useInvestorUsers } from '@/hooks/user/use-investor-users';
+import { useMovementTypes } from '@/hooks/movement-type/use-movement-types';
 import { usePermission } from '@/hooks/menu/use-permission';
-import type { KardexEntry, KardexEntryFields } from '@/domain/kardex/kardex-entry.entity';
+import type { KardexEntry, KardexEntryFields, KardexEntryListItem } from '@/domain/kardex/kardex-entry.entity';
 import { PageToolbar } from '@/components/ui/page-toolbar';
 import { Pagination } from '@/components/ui/pagination';
+import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { KardexTable } from '@/components/kardex/kardex-table';
 import { KardexEntryDialog } from '@/components/kardex/kardex-entry-dialog';
 import { RequirePermission } from '@/components/auth/require-permission';
 import { ApiError } from '@/infrastructure/http/http-client';
+import { listKardexEntriesByInvestmentUseCase } from '@/infrastructure/di/kardex.container';
+import { downloadKardexPdf } from '@/lib/kardex-pdf';
 
 // Menú propio, independiente de "Inversiones" (§14 de ARCHITECTURE.md): un
 // rol puede tener acceso a Kardex sin tener acceso al CRUD de Inversiones
@@ -24,7 +28,14 @@ import { ApiError } from '@/infrastructure/http/http-client';
 const MENU_KEY = 'kardex';
 const MY_INVESTMENTS_PAGE_SIZE = 10;
 const ENTRIES_PAGE_SIZE = 20;
+// El PDF necesita el historial COMPLETO, no la página que se ve en
+// pantalla — pero `pageSize` tiene un tope de 100 en el backend
+// (`ListKardexEntriesQueryDto`, mismo criterio en todos los listados
+// paginados de la app), así que se trae en varias vueltas de a 100 en vez
+// de pedir todo de una (ver `fetchAllKardexEntries`).
+const PDF_FETCH_PAGE_SIZE = 100;
 const SEARCH_DEBOUNCE_MS = 300;
+const NUMBER_FORMAT = new Intl.NumberFormat('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 interface DialogState {
   open: boolean;
@@ -33,11 +44,32 @@ interface DialogState {
   sessionId: number;
 }
 
+/** Trae TODAS las filas activas de una inversión, en vueltas de
+ * `PDF_FETCH_PAGE_SIZE` — solo para el PDF (la pantalla sigue paginada de
+ * verdad con `ENTRIES_PAGE_SIZE`). */
+async function fetchAllKardexEntries(investmentId: string): Promise<KardexEntryListItem[]> {
+  const items: KardexEntryListItem[] = [];
+  let page = 1;
+  while (true) {
+    const result = await listKardexEntriesByInvestmentUseCase.execute({
+      investmentId,
+      page,
+      pageSize: PDF_FETCH_PAGE_SIZE,
+    });
+    items.push(...result.items);
+    if (items.length >= result.total || result.items.length === 0) {
+      break;
+    }
+    page += 1;
+  }
+  return items;
+}
+
 export default function KardexPage() {
   const searchParams = useSearchParams();
-  // Ir de "/kardex?propertyId=&investmentId=&gestion=" (atajo) a "/kardex"
-  // (clic directo en el ítem del sidebar) es la MISMA ruta — Next no
-  // remonta el componente solo porque cambia el query string, así que el
+  // Ir de "/kardex?investmentId=&investmentPropertyId=&..." (atajo) a
+  // "/kardex" (clic directo en el ítem del sidebar) es la MISMA ruta — Next
+  // no remonta el componente solo porque cambia el query string, así que el
   // estado local (`investmentId`, etc.) quedaba pegado del clic anterior.
   // La `key` fuerza el remount cada vez que cambia la URL de esta pantalla.
   return (
@@ -51,14 +83,26 @@ function KardexPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { properties } = usePropertyOptions();
-  // Atajo desde la tabla de Inversiones ("Ver kardex"): llega con los tres
-  // en la URL. `propertyId` solo se usa para resolver esa inversión puntual
-  // — la lista de abajo siempre es "mis inversiones", no las de esa
-  // propiedad. `shortcutGestion` viaja solo para poder reconstruir esos
-  // mismos filtros al volver (ver el botón "Volver a Inversiones").
-  const [shortcutPropertyId] = useState<string | null>(() => searchParams.get('propertyId'));
-  const [shortcutGestion] = useState<string | null>(() => searchParams.get('gestion'));
+  // Atajo desde la tabla de Inversiones ("Ver kardex"): llega con
+  // `investmentId` + `investmentPropertyId` (la propiedad de ESA inversión
+  // puntual, para poder resolver sus datos — no hay `GET /investments/:id`,
+  // se busca dentro de `useInvestments(propertyId)`) más TODOS los filtros
+  // que tenía activos la pantalla de Inversiones (`gestion`/`propertyId`/
+  // `investorUserId`/`search`/`page`, con esos mismos nombres). `returnQuery`
+  // es esa misma URL de llegada, sin los dos primeros — así "Volver a
+  // Inversiones" restaura EXACTAMENTE los filtros que había antes, en vez
+  // de inventar unos nuevos a partir de la inversión puntual que se abrió
+  // (bug real: antes reusaba `investmentPropertyId` como si fuera el filtro
+  // de Propiedad que tenía la pantalla, aunque no hubiera ninguno elegido).
+  const [investmentPropertyId] = useState<string | null>(() => searchParams.get('investmentPropertyId'));
   const [investmentId, setInvestmentId] = useState<string | null>(() => searchParams.get('investmentId'));
+  const [returnQuery] = useState<string>(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('investmentId');
+    params.delete('investmentPropertyId');
+    return params.toString();
+  });
+  const isShortcut = investmentPropertyId !== null;
   const [myInvestmentsPage, setMyInvestmentsPage] = useState(1);
 
   const {
@@ -67,9 +111,12 @@ function KardexPageContent() {
     totalPages: myInvestmentsTotalPages,
     isLoading: myInvestmentsLoading,
   } = useMyInvestments(myInvestmentsPage, MY_INVESTMENTS_PAGE_SIZE);
-  const { investments: shortcutInvestments } = useInvestments(shortcutPropertyId);
+  const { investments: shortcutInvestments } = useInvestments(investmentPropertyId);
   const { canCreate, canEdit, canDelete } = usePermission(MENU_KEY);
   const { investors: allInvestors } = useInvestorUsers();
+  const { data: movementTypesData } = useMovementTypes();
+  const movementTypes = movementTypesData ?? [];
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
@@ -136,6 +183,28 @@ function KardexPageContent() {
       await createEntry({ investmentId, ...data });
     } else if (dialog.entry) {
       await updateEntry(dialog.entry.id, data);
+    }
+  }
+
+  async function handleDownloadPdf(): Promise<void> {
+    if (!investmentId || !selectedInvestment) return;
+    setDownloadingPdf(true);
+    try {
+      // Ignora la paginación de pantalla — trae el historial activo
+      // completo para que el PDF no salga cortado en 20 filas.
+      const allEntries = await fetchAllKardexEntries(investmentId);
+      downloadKardexPdf({
+        propertyName: propertyName(selectedInvestment.propertyId),
+        investmentDescription: selectedInvestment.description,
+        gestion: selectedInvestment.gestion,
+        investors,
+        entries: allEntries,
+        movementTypes,
+      });
+    } catch (err) {
+      setErrorMessage(err instanceof ApiError ? err.message : 'Error al generar el PDF');
+    } finally {
+      setDownloadingPdf(false);
     }
   }
 
@@ -211,18 +280,34 @@ function KardexPageContent() {
       <button
         type="button"
         onClick={() =>
-          shortcutPropertyId
-            ? router.push(`/investments?gestion=${shortcutGestion ?? ''}&propertyId=${shortcutPropertyId}`)
+          isShortcut
+            ? router.push(`/investments${returnQuery ? `?${returnQuery}` : ''}`)
             : setInvestmentId(null)
         }
         className="tipo-link mb-4 flex items-center gap-1 cursor-pointer"
       >
         <ArrowLeft className="h-4 w-4" strokeWidth={1.5} />
-        {shortcutPropertyId ? 'Volver a Inversiones' : 'Volver a Mis inversiones'}
+        {isShortcut ? 'Volver a Inversiones' : 'Volver a Mis inversiones'}
       </button>
-      <h1 className="tipo-titulo-card mb-6">
-        Kardex{selectedInvestment ? ` — ${selectedInvestment.description} (${selectedInvestment.gestion})` : ''}
-      </h1>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <h1 className="tipo-titulo-card">
+            Kardex{selectedInvestment ? ` — ${selectedInvestment.description} (${selectedInvestment.gestion})` : ''}
+          </h1>
+          {selectedInvestment && (
+            <p className="tipo-secundario">
+              Saldo actual: {selectedInvestment.balanceQuantity} cabezas ·{' '}
+              {NUMBER_FORMAT.format(selectedInvestment.balanceKilos)} kg
+            </p>
+          )}
+        </div>
+        {selectedInvestment && (
+          <Button type="button" variant="secondary" onClick={handleDownloadPdf} loading={downloadingPdf} className="shrink-0">
+            <Download className="h-4 w-4" strokeWidth={1.5} />
+            Descargar PDF
+          </Button>
+        )}
+      </div>
       <div className="card">
         <PageToolbar
           search={searchInput}

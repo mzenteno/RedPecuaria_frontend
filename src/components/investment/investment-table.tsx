@@ -61,6 +61,7 @@ export function InvestmentTable({
             <th>Propiedad</th>
             <th>Gestión</th>
             <th>Descripción</th>
+            <th>Estado</th>
             <th>Inversionistas</th>
             <th>Creada el</th>
             <th className="text-center">Acciones</th>
@@ -72,6 +73,18 @@ export function InvestmentTable({
               <td>{propertyName(investment.propertyId)}</td>
               <td>{investment.gestion}</td>
               <td>{investment.description}</td>
+              <td>
+                <span
+                  className="tipo-label"
+                  style={{
+                    padding: '0.125rem 0.5rem',
+                    color: investment.isFinished ? 'var(--text-muted)' : 'var(--primary)',
+                    background: investment.isFinished ? 'var(--bg-input)' : 'var(--primary-light)',
+                  }}
+                >
+                  {investment.isFinished ? 'Terminada' : 'Activa'}
+                </span>
+              </td>
               <td>{investorNames(investment.investorIds)}</td>
               <td>{formatDate(investment.createdAt)}</td>
               <td>
@@ -112,7 +125,7 @@ export function InvestmentTable({
           ))}
           {investments.length === 0 && (
             <tr>
-              <td colSpan={6} className="data-table-empty">
+              <td colSpan={7} className="data-table-empty">
                 No se encontraron inversiones
               </td>
             </tr>

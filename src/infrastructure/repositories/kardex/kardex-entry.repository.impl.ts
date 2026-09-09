@@ -1,11 +1,16 @@
 import type { KardexEntryRepository } from '@/domain/kardex/kardex-entry.repository';
 import type { ListKardexEntriesParams } from '@/domain/kardex/list-kardex-entries-by-investment.use-case';
 import type { PaginatedResult } from '@/domain/common/paginated-result';
-import type { KardexEntry, CreateKardexEntryData, UpdateKardexEntryData } from '@/domain/kardex/kardex-entry.entity';
+import type {
+  KardexEntry,
+  KardexEntryListItem,
+  CreateKardexEntryData,
+  UpdateKardexEntryData,
+} from '@/domain/kardex/kardex-entry.entity';
 import { httpClient } from '../../http/http-client';
 
 export class KardexEntryRepositoryImpl implements KardexEntryRepository {
-  async listByInvestment(params: ListKardexEntriesParams): Promise<PaginatedResult<KardexEntry>> {
+  async listByInvestment(params: ListKardexEntriesParams): Promise<PaginatedResult<KardexEntryListItem>> {
     const query = new URLSearchParams({
       investmentId: params.investmentId,
       page: String(params.page),
@@ -14,7 +19,7 @@ export class KardexEntryRepositoryImpl implements KardexEntryRepository {
     if (params.search) {
       query.set('search', params.search);
     }
-    const result = await httpClient.getPaginated<KardexEntry>(`/kardex-entries?${query.toString()}`);
+    const result = await httpClient.getPaginated<KardexEntryListItem>(`/kardex-entries?${query.toString()}`);
     return { items: result.items, total: result.total, page: result.page, pageSize: result.pageSize };
   }
 

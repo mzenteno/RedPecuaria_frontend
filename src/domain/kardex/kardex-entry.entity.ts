@@ -1,36 +1,36 @@
-/**
- * "ingreso": carga general de ganado a la inversión, sin inversionista
- * particular. "venta": movimiento de salida atribuido a un inversionista
- * puntual. "baja": pérdida/muerte, general como el ingreso, sin
- * inversionista. Catálogo fijo, igual criterio que el backend (ver
- * docs/investment/investment.md, no es administrable).
- */
-export type KardexMovementType = 'ingreso' | 'venta' | 'baja';
-
-export const KARDEX_MOVEMENT_TYPE_OPTIONS: { value: KardexMovementType; label: string }[] = [
-  { value: 'ingreso', label: 'Ingreso' },
-  { value: 'venta', label: 'Venta' },
-  { value: 'baja', label: 'Baja' },
-];
-
 export interface KardexEntry {
   id: string;
   investmentId: string;
   entryDate: string;
   detail: string;
-  movementType: KardexMovementType;
-  /** Solo presente si `movementType === 'venta'`. */
+  /** FK a `MovementType` (ver `domain/movement-type/`) — ya no un string
+   * literal, catálogo cerrado sembrado por migración en el backend. */
+  movementTypeId: string;
+  /** Solo presente si el tipo de movimiento es "venta". */
   investorUserId: string | null;
   avgWeight: number;
   entryQuantity: number;
   entryKilos: number;
   exitQuantity: number;
   exitKilos: number;
-  balanceQuantity: number;
-  balanceKilos: number;
+  /** Dato que tipea el usuario en Ingreso/Venta (0 en Baja) — el saldo
+   * acumulado vive en `Investment.balanceQuantity`/`balanceKilos`/`total`,
+   * no acá (ver `domain/investment/investment.entity.ts`). */
   total: number;
   isDeleted: boolean;
   createdAt: string;
+}
+
+/** Solo para el listado (`GET /kardex-entries`) — agrega el saldo corrido
+ * (cantidad/kilos) después de este movimiento, calculado por el backend al
+ * leer (función de ventana SQL sobre todo el historial de la inversión),
+ * nunca guardado. Distinto del saldo VIGENTE de la inversión
+ * (`Investment.balanceQuantity`/`balanceKilos`) — esto es el histórico fila
+ * por fila, solo para mostrar. Crear/editar sigue trabajando con
+ * `KardexEntry` a secas. */
+export interface KardexEntryListItem extends KardexEntry {
+  runningBalanceQuantity: number;
+  runningBalanceKilos: number;
 }
 
 export type KardexEntryFields = Omit<KardexEntry, 'id' | 'investmentId' | 'isDeleted' | 'createdAt'>;
