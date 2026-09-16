@@ -1,5 +1,5 @@
 import type { InvestmentRepository } from '@/domain/investment/investment.repository';
-import type { Investment, CreateInvestmentData, UpdateInvestmentData } from '@/domain/investment/investment.entity';
+import type { Investment, InvestmentListItem, CreateInvestmentData, UpdateInvestmentData } from '@/domain/investment/investment.entity';
 import type { PaginatedResult, PaginationParams } from '@/domain/common/paginated-result';
 import type { ListInvestmentsByGestionParams } from '@/domain/investment/list-investments-by-gestion.use-case';
 import type { ListInvestmentsByPropertyPaginatedParams } from '@/domain/investment/list-investments-by-property-paginated.use-case';
@@ -17,17 +17,13 @@ function toQueryString(params: Record<string, string | number | undefined>): str
 }
 
 export class InvestmentRepositoryImpl implements InvestmentRepository {
-  async listByProperty(propertyId: string): Promise<Investment[]> {
-    return httpClient.get<Investment[]>(`/investments?propertyId=${propertyId}`);
-  }
-
-  async listMine(params: PaginationParams): Promise<PaginatedResult<Investment>> {
+  async listMine(params: PaginationParams): Promise<PaginatedResult<InvestmentListItem>> {
     const query = toQueryString({ page: params.page, pageSize: params.pageSize });
-    const result = await httpClient.getPaginated<Investment>(`/investments/mine?${query}`);
+    const result = await httpClient.getPaginated<InvestmentListItem>(`/investments/mine?${query}`);
     return { items: result.items, total: result.total, page: result.page, pageSize: result.pageSize };
   }
 
-  async listByGestion(params: ListInvestmentsByGestionParams): Promise<PaginatedResult<Investment>> {
+  async listByGestion(params: ListInvestmentsByGestionParams): Promise<PaginatedResult<InvestmentListItem>> {
     const query = toQueryString({
       gestion: params.gestion,
       page: params.page,
@@ -36,13 +32,13 @@ export class InvestmentRepositoryImpl implements InvestmentRepository {
       investorUserId: params.investorUserId,
       search: params.search,
     });
-    const result = await httpClient.getPaginated<Investment>(`/investments/by-gestion?${query}`);
+    const result = await httpClient.getPaginated<InvestmentListItem>(`/investments/by-gestion?${query}`);
     return { items: result.items, total: result.total, page: result.page, pageSize: result.pageSize };
   }
 
   async listByPropertyPaginated(
     params: ListInvestmentsByPropertyPaginatedParams,
-  ): Promise<PaginatedResult<Investment>> {
+  ): Promise<PaginatedResult<InvestmentListItem>> {
     const query = toQueryString({
       propertyId: params.propertyId,
       page: params.page,
@@ -51,11 +47,11 @@ export class InvestmentRepositoryImpl implements InvestmentRepository {
       investorUserId: params.investorUserId,
       search: params.search,
     });
-    const result = await httpClient.getPaginated<Investment>(`/investments/by-property?${query}`);
+    const result = await httpClient.getPaginated<InvestmentListItem>(`/investments/by-property?${query}`);
     return { items: result.items, total: result.total, page: result.page, pageSize: result.pageSize };
   }
 
-  async listByInvestor(params: ListInvestmentsByInvestorParams): Promise<PaginatedResult<Investment>> {
+  async listByInvestor(params: ListInvestmentsByInvestorParams): Promise<PaginatedResult<InvestmentListItem>> {
     const query = toQueryString({
       investorUserId: params.investorUserId,
       page: params.page,
@@ -63,8 +59,12 @@ export class InvestmentRepositoryImpl implements InvestmentRepository {
       propertyId: params.propertyId,
       search: params.search,
     });
-    const result = await httpClient.getPaginated<Investment>(`/investments/by-investor?${query}`);
+    const result = await httpClient.getPaginated<InvestmentListItem>(`/investments/by-investor?${query}`);
     return { items: result.items, total: result.total, page: result.page, pageSize: result.pageSize };
+  }
+
+  async getById(id: string): Promise<Investment> {
+    return httpClient.get<Investment>(`/investments/${id}`);
   }
 
   async create(data: CreateInvestmentData): Promise<Investment> {

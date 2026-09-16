@@ -6,7 +6,7 @@ const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
  * Forma exacta del envoltorio de la API real (ver ARCHITECTURE.md §6 del
  * backend) — no un formato genérico inventado.
  */
-interface ApiSuccessEnvelope<T> {
+interface ApiSuccessEnvelope<T, M extends object = object> {
   success: true;
   statusCode: number;
   timestamp: string;
@@ -14,8 +14,10 @@ interface ApiSuccessEnvelope<T> {
   data: T;
   /** Solo presente en listados paginados por el servidor (ej. `GET /users`)
    * — el `ResponseInterceptor` del backend lo sube a este nivel en vez de
-   * anidarlo dentro de `data` (ver ARCHITECTURE.md §6 del backend). */
-  meta?: { total: number; page: number; pageSize: number };
+   * anidarlo dentro de `data` (ver ARCHITECTURE.md §6 del backend). `M`:
+   * algunos listados agregan campos propios acá (ej. `totalDebe`/
+   * `totalHaber` en Kardex) — default `object` para no afectar al resto. */
+  meta?: { total: number; page: number; pageSize: number } & M;
 }
 
 interface ApiErrorEnvelope {
@@ -86,11 +88,11 @@ function redirectToLogin(): void {
 }
 
 /** `null` = 204 No Content (ej. logout) — no hay body que parsear. */
-async function requestEnvelope<T>(
+async function requestEnvelope<T, M extends object = object>(
   path: string,
   options: RequestInit = {},
   isRetry = false,
-): Promise<ApiSuccessEnvelope<T> | null> {
+): Promise<ApiSuccessEnvelope<T, M> | null> {
   const accessToken = getAccessToken();
   const response = await fetch(`${BASE_URL}${path}`, {
     ...options,
@@ -107,7 +109,7 @@ async function requestEnvelope<T>(
     });
     const refreshed = await refreshPromise;
     if (refreshed) {
-      return requestEnvelope<T>(path, options, true);
+      return requestEnvelope<T, M>(path, options, true);
     }
     redirectToLogin();
     throw new ApiError(401, 'Unauthorized', 'La sesión expiró, iniciá sesión de nuevo');
@@ -118,7 +120,7 @@ async function requestEnvelope<T>(
   }
 
   const body = (await response.json().catch(() => null)) as
-    | ApiSuccessEnvelope<T>
+    | ApiSuccessEnvelope<T, M>
     | ApiErrorEnvelope
     | null;
 
@@ -146,13 +148,18 @@ interface PaginatedResponse<T> {
 }
 
 /** Para listados que el backend pagina de verdad (ej. `GET /users`) — a
- * diferencia de `get`, no descarta `meta`. */
-async function getPaginated<T>(path: string): Promise<PaginatedResponse<T>> {
-  const envelope = await requestEnvelope<T[]>(path, { method: 'GET' });
+ * diferencia de `get`, no descarta `meta`. `M`: para listados que agregan
+ * campos propios a `meta` (ej. `totalDebe`/`totalHaber` en Kardex) — default
+ * `object`, así ningún otro llamador (que no pasa `M`) se ve afectado. */
+async function getPaginated<T, M extends object = object>(
+  path: string,
+): Promise<PaginatedResponse<T> & M> {
+  const envelope = await requestEnvelope<T[], M>(path, { method: 'GET' });
   if (!envelope || !envelope.meta) {
     throw new Error(`Se esperaba una respuesta paginada (con "meta") de ${path}`);
   }
-  return { items: envelope.data, total: envelope.meta.total, page: envelope.meta.page, pageSize: envelope.meta.pageSize };
+  const { total, page, pageSize, ...extra } = envelope.meta;
+  return { items: envelope.data, total, page, pageSize, ...extra } as PaginatedResponse<T> & M;
 }
 
 export const httpClient = {

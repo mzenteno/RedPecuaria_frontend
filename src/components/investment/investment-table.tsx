@@ -1,31 +1,25 @@
 import { ClipboardList, Pencil, Trash2 } from 'lucide-react';
-import type { Investment } from '@/domain/investment/investment.entity';
-import type { Property } from '@/domain/property/property.entity';
-import type { User } from '@/domain/user/user.entity';
+import type { InvestmentListItem } from '@/domain/investment/investment.entity';
+import type { UserOption } from '@/domain/user/user.entity';
 import { formatDate } from '@/lib/format-date';
 
 interface InvestmentTableProps {
-  investments: Investment[];
-  investors: User[];
-  /** Ahora que "Gestión" (no "Propiedad") es el filtro que dispara la
-   * consulta, la tabla puede mostrar inversiones de varias propiedades a
-   * la vez — hace falta la columna para saber de cuál es cada una. */
-  properties: Property[];
+  investments: InvestmentListItem[];
+  investors: UserOption[];
   loading: boolean;
   canEdit: boolean;
   canDelete: boolean;
   /** Menú `kardex` es independiente de `investments` — un rol puede no
    * tenerlo, y ahí no tiene sentido mostrar el atajo. */
   canViewKardex: boolean;
-  onEdit: (investment: Investment) => void;
-  onDeactivate: (investment: Investment) => void;
-  onViewKardex: (investment: Investment) => void;
+  onEdit: (investment: InvestmentListItem) => void;
+  onDeactivate: (investment: InvestmentListItem) => void;
+  onViewKardex: (investment: InvestmentListItem) => void;
 }
 
 export function InvestmentTable({
   investments,
   investors,
-  properties,
   loading,
   canEdit,
   canDelete,
@@ -49,10 +43,6 @@ export function InvestmentTable({
     return names.length > 0 ? names.join(', ') : '—';
   }
 
-  function propertyName(propertyId: string): string {
-    return properties.find((property) => property.id === propertyId)?.name ?? '—';
-  }
-
   return (
     <div className="data-table-wrapper">
       <table className="data-table" style={{ minWidth: '64rem' }}>
@@ -70,7 +60,7 @@ export function InvestmentTable({
         <tbody>
           {investments.map((investment) => (
             <tr key={investment.id}>
-              <td>{propertyName(investment.propertyId)}</td>
+              <td>{investment.propertyName}</td>
               <td>{investment.gestion}</td>
               <td>{investment.description}</td>
               <td>

@@ -2,9 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useUsers } from '@/hooks/user/use-users';
-import { useUserTypes } from '@/hooks/user-type/use-user-types';
 import { usePermission } from '@/hooks/menu/use-permission';
-import type { User } from '@/domain/user/user.entity';
+import type { UserListItem } from '@/domain/user/user.entity';
 import type { CreateUserData, UpdateUserData } from '@/domain/user/user.entity';
 import { PageToolbar } from '@/components/ui/page-toolbar';
 import { Pagination } from '@/components/ui/pagination';
@@ -21,7 +20,7 @@ const SEARCH_DEBOUNCE_MS = 300;
 interface DialogState {
   open: boolean;
   mode: 'create' | 'edit';
-  user: User | null;
+  user: UserListItem | null;
   /** Mismo motivo que en `CompanyDialog`: fuerza el remount del diálogo al
    * abrir "Nuevo usuario" dos veces seguidas. */
   sessionId: number;
@@ -57,7 +56,6 @@ function UsersPageContent() {
     search,
   );
   const { canCreate, canEdit, canDelete } = usePermission(MENU_KEY);
-  const { data: userTypes = [] } = useUserTypes();
 
   const [dialog, setDialog] = useState<DialogState>({
     open: false,
@@ -65,14 +63,14 @@ function UsersPageContent() {
     user: null,
     sessionId: 0,
   });
-  const [pendingDeactivate, setPendingDeactivate] = useState<User | null>(null);
+  const [pendingDeactivate, setPendingDeactivate] = useState<UserListItem | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   function openCreate(): void {
     setDialog((prev) => ({ open: true, mode: 'create', user: null, sessionId: prev.sessionId + 1 }));
   }
 
-  function openEdit(user: User): void {
+  function openEdit(user: UserListItem): void {
     setDialog((prev) => ({ open: true, mode: 'edit', user, sessionId: prev.sessionId + 1 }));
   }
 
@@ -112,7 +110,6 @@ function UsersPageContent() {
         />
         <UserTable
           users={users}
-          userTypes={userTypes}
           loading={isLoading}
           canEdit={canEdit}
           canDelete={canDelete}

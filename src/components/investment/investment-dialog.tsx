@@ -4,9 +4,10 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import type { Investment } from '@/domain/investment/investment.entity';
+import type { InvestmentListItem } from '@/domain/investment/investment.entity';
 import { useInvestorUsers } from '@/hooks/user/use-investor-users';
 import { usePropertyOptions } from '@/hooks/property/use-property-options';
+import { useInvestmentById } from '@/hooks/investment/use-investment-by-id';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
@@ -31,7 +32,7 @@ type InvestmentFormData = z.infer<typeof investmentSchema>;
 interface InvestmentDialogProps {
   open: boolean;
   mode: 'create' | 'edit';
-  investment: Investment | null;
+  investment: InvestmentListItem | null;
   /** Solo se usa en el alta — si la pantalla ya tiene una Propiedad elegida
    * en su combo de filtro, conviene precargar ese mismo valor acá en vez de
    * arrancar vacío (evita elegir la misma propiedad dos veces). Sigue
@@ -63,6 +64,12 @@ interface InvestmentDialogProps {
  * alta. Es una elección manual del usuario, no se deriva del saldo: la
  * idea de uso es marcarla como Terminada cuando `balanceQuantity` llegue a
  * 0, pero nada lo fuerza (ver docs/investment/investment.md del backend).
+ *
+ * En edición, `investment` (la fila de la lista, a propósito liviana —
+ * ver `InvestmentListItem`) solo se usa para saber QUÉ id editar. Todos
+ * los valores del formulario salen de `useInvestmentById`, nunca de esa
+ * fila — mismo criterio que `UserDialog`/`useUserById`: el diálogo de
+ * edición no depende del listado, pide el detalle completo por id.
  */
 export function InvestmentDialog({
   open,
@@ -74,22 +81,42 @@ export function InvestmentDialog({
 }: InvestmentDialogProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [investorIds, setInvestorIds] = useState<string[]>(investment?.investorIds ?? []);
+  const [investorIds, setInvestorIds] = useState<string[]>([]);
   const { investors, isLoading: investorsLoading } = useInvestorUsers();
   const { properties, isLoading: propertiesLoading } = usePropertyOptions();
+  const { data: investmentDetail, isLoading: investmentDetailLoading } = useInvestmentById(
+    mode === 'edit' ? (investment?.id ?? null) : null,
+  );
+  const loadingDetail = mode === 'edit' && investmentDetailLoading;
+
+  // Para saber si ya se sincronizó `investorIds` con el detalle que llegó
+  // (async) — sin esto, cada re-render volvería a pisar lo que el usuario
+  // ya tildó/destildó a mano. Ajuste de estado durante el render (patrón
+  // recomendado por React para "resetear estado cuando cambia una prop/
+  // dato externo"), no un efecto — evita el render en cascada.
+  const [investorIdsLoadedFor, setInvestorIdsLoadedFor] = useState<string | null>(null);
+  if (mode === 'edit' && investmentDetail && investorIdsLoadedFor !== investmentDetail.id) {
+    setInvestorIdsLoadedFor(investmentDetail.id);
+    setInvestorIds(investmentDetail.investorIds);
+  }
+
   const {
     register,
     handleSubmit,
     formState: { errors },
   } = useForm<InvestmentFormData>({
     resolver: zodResolver(investmentSchema),
-    defaultValues: {
-      propertyId: mode === 'edit' && investment ? investment.propertyId : (defaultPropertyId ?? ''),
-      gestion: mode === 'edit' && investment ? String(investment.gestion) : '',
-      description: mode === 'edit' ? (investment?.description ?? '') : '',
+    // `values` (no `defaultValues`): el detalle llega después del primer
+    // render (`useInvestmentById` es async) — con `values` el formulario se
+    // resincroniza solo apenas llega, sin `reset()` manual (mismo criterio
+    // que `EditUserForm`).
+    values: {
+      propertyId: mode === 'edit' ? (investmentDetail?.propertyId ?? '') : (defaultPropertyId ?? ''),
+      gestion: mode === 'edit' ? (investmentDetail ? String(investmentDetail.gestion) : '') : '',
+      description: mode === 'edit' ? (investmentDetail?.description ?? '') : '',
       // Una inversión recién creada siempre arranca activa — el combo
       // "Estado" ni se muestra en modo alta.
-      isFinished: mode === 'edit' && investment ? String(investment.isFinished) : 'false',
+      isFinished: mode === 'edit' && investmentDetail ? String(investmentDetail.isFinished) : 'false',
     },
   });
 
@@ -137,7 +164,7 @@ export function InvestmentDialog({
             <Select
               label="Propiedad"
               error={errors.propertyId?.message}
-              disabled={propertiesLoading}
+              disabled={propertiesLoading || loadingDetail}
               {...register('propertyId')}
             >
               {properties.map((property) => (
@@ -147,7 +174,12 @@ export function InvestmentDialog({
               ))}
             </Select>
 
-            <Select label="Gestión" error={errors.gestion?.message} {...register('gestion')}>
+            <Select
+              label="Gestión"
+              error={errors.gestion?.message}
+              disabled={loadingDetail}
+              {...register('gestion')}
+            >
               {GESTION_YEARS.map((year) => (
                 <option key={year} value={year}>
                   {year}
@@ -159,12 +191,13 @@ export function InvestmentDialog({
               label="Descripción"
               placeholder="Ej. Torillos"
               autoFocus
+              disabled={loadingDetail}
               error={errors.description?.message}
               {...register('description')}
             />
 
             {mode === 'edit' && (
-              <Select label="Estado" error={errors.isFinished?.message} {...register('isFinished')}>
+              <Select label="Estado" error={errors.isFinished?.message} disabled={loadingDetail} {...register('isFinished')}>
                 <option value="false">Activa</option>
                 <option value="true">Terminada</option>
               </Select>
@@ -201,7 +234,7 @@ export function InvestmentDialog({
             <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>
               Cancelar
             </Button>
-            <Button type="submit" loading={saving}>
+            <Button type="submit" loading={saving} disabled={loadingDetail}>
               Guardar
             </Button>
           </div>

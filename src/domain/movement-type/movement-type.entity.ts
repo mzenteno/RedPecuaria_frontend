@@ -5,6 +5,5 @@
 export interface MovementType {
   id: string;
   name: string;
-  isDeleted: boolean;
   createdAt: string;
 }

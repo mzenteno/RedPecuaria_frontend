@@ -1,19 +1,17 @@
 import { Pencil, Trash2 } from 'lucide-react';
-import type { User } from '@/domain/user/user.entity';
-import type { UserType } from '@/domain/user-type/user-type.entity';
+import type { UserListItem } from '@/domain/user/user.entity';
 import { formatDate } from '@/lib/format-date';
 
 interface UserTableProps {
-  users: User[];
-  userTypes: UserType[];
+  users: UserListItem[];
   loading: boolean;
   canEdit: boolean;
   canDelete: boolean;
-  onEdit: (user: User) => void;
-  onDeactivate: (user: User) => void;
+  onEdit: (user: UserListItem) => void;
+  onDeactivate: (user: UserListItem) => void;
 }
 
-export function UserTable({ users, userTypes, loading, canEdit, canDelete, onEdit, onDeactivate }: UserTableProps) {
+export function UserTable({ users, loading, canEdit, canDelete, onEdit, onDeactivate }: UserTableProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -24,10 +22,6 @@ export function UserTable({ users, userTypes, loading, canEdit, canDelete, onEdi
 
   const showActions = canEdit || canDelete;
   const columnCount = showActions ? 6 : 5;
-
-  function userTypeName(userTypeId: string): string {
-    return userTypes.find((type) => type.id === userTypeId)?.name ?? '—';
-  }
 
   return (
     <div className="data-table-wrapper">
@@ -48,7 +42,7 @@ export function UserTable({ users, userTypes, loading, canEdit, canDelete, onEdi
               <td>{user.username}</td>
               <td>{user.fullName}</td>
               <td>{user.email}</td>
-              <td>{userTypeName(user.userTypeId)}</td>
+              <td>{user.userTypeName}</td>
               <td>{formatDate(user.createdAt)}</td>
               {showActions && (
                 <td>

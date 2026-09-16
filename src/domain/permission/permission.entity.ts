@@ -6,7 +6,6 @@ export interface RoleMenuPermission {
   canCreate: boolean;
   canEdit: boolean;
   canDelete: boolean;
-  isDeleted: boolean;
 }
 
 export type SetPermissionData = Pick<RoleMenuPermission, 'canView' | 'canCreate' | 'canEdit' | 'canDelete'>;

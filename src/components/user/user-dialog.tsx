@@ -6,9 +6,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Eye, EyeOff } from 'lucide-react';
-import type { User, CreateUserData, UpdateUserData } from '@/domain/user/user.entity';
+import type { UserListItem, CreateUserData, UpdateUserData } from '@/domain/user/user.entity';
 import { useRoles } from '@/hooks/role/use-roles';
 import { useUserTypes } from '@/hooks/user-type/use-user-types';
+import { useUserById } from '@/hooks/user/use-user-by-id';
 import { useUserRole } from '@/hooks/user-company/use-user-role';
 import { changeUserTypeUseCase } from '@/infrastructure/di/user.container';
 import { changeUserRoleUseCase } from '@/infrastructure/di/user-company.container';
@@ -39,7 +40,7 @@ type EditFormData = z.infer<typeof editUserSchema>;
 interface UserDialogProps {
   open: boolean;
   mode: 'create' | 'edit';
-  user: User | null;
+  user: UserListItem | null;
   onClose: () => void;
   onSave: (data: CreateUserData | UpdateUserData) => Promise<void>;
 }
@@ -196,7 +197,7 @@ function EditUserForm({
   onClose,
   onSave,
 }: {
-  user: User | null;
+  user: UserListItem | null;
   onClose: () => void;
   onSave: (data: UpdateUserData) => Promise<void>;
 }) {
@@ -205,22 +206,28 @@ function EditUserForm({
   const [error, setError] = useState<string | null>(null);
   const { roles } = useRoles();
   const { data: userTypes } = useUserTypes();
-  // El vínculo (id + rol) del usuario en la empresa activa — llega async, a
-  // diferencia de `user.userTypeId` que ya viene en la fila de la tabla.
+  // El listado (`UserListItem`) es liviano a propósito (solo lo que se
+  // muestra en la tabla, ver `docs/user/changes/...`) — el formulario NUNCA
+  // debe leer sus campos como si fueran el detalle completo. `user` (la fila
+  // clickeada) solo se usa para saber CUÁL id editar; todo lo demás
+  // (`email`, `fullName`, `userTypeId`) sale de `GET /users/:id`, igual que
+  // el rol sale de `GET /users/:id/role` vía `useUserRole`.
+  const { data: userDetail, isLoading: userDetailLoading } = useUserById(user?.id ?? null);
   const { data: userCompany, isLoading: userCompanyLoading } = useUserRole(user?.id ?? null);
+  const loadingDetail = userDetailLoading || userCompanyLoading;
   const {
     register,
     handleSubmit,
     formState: { errors },
   } = useForm<EditFormData>({
     resolver: zodResolver(editUserSchema),
-    // `values` (no `defaultValues`): el rol llega después del primer render
-    // (`useUserRole` es async) — con `values` el formulario se resincroniza
-    // solo apenas llega, sin necesidad de un `reset()` manual.
+    // `values` (no `defaultValues`): el detalle y el rol llegan después del
+    // primer render (`useUserById`/`useUserRole` son async) — con `values`
+    // el formulario se resincroniza solo apenas llegan, sin `reset()` manual.
     values: {
-      email: user?.email ?? '',
-      fullName: user?.fullName ?? '',
-      userTypeId: user?.userTypeId ?? '',
+      email: userDetail?.email ?? '',
+      fullName: userDetail?.fullName ?? '',
+      userTypeId: userDetail?.userTypeId ?? '',
       roleId: userCompany?.roleId ?? '',
     },
   });
@@ -233,13 +240,14 @@ function EditUserForm({
       await onSave({ email: data.email, fullName: data.fullName });
       // Acciones separadas del backend (ver `docs/user/user.md`) — solo se
       // llaman si de verdad cambiaron, para no upsertear sin necesidad.
-      if (data.userTypeId !== user.userTypeId) {
+      if (data.userTypeId !== userDetail?.userTypeId) {
         await changeUserTypeUseCase.execute(user.id, data.userTypeId);
       }
       if (userCompany && data.roleId !== userCompany.roleId) {
         await changeUserRoleUseCase.execute(userCompany.id, data.roleId);
       }
       await queryClient.invalidateQueries({ queryKey: ['users'] });
+      await queryClient.invalidateQueries({ queryKey: ['user', user.id] });
       await queryClient.invalidateQueries({ queryKey: ['user-role', user.id] });
       onClose();
     } catch (err) {
@@ -254,22 +262,29 @@ function EditUserForm({
       <div className="flex flex-col gap-4">
         <Input
           label="Usuario"
-          value={user?.username ?? ''}
+          value={userDetail?.username ?? ''}
           disabled
           title="El usuario de login no se puede cambiar"
         />
-        <Input label="Nombre completo" autoFocus error={errors.fullName?.message} {...register('fullName')} />
+        <Input
+          label="Nombre completo"
+          autoFocus
+          disabled={loadingDetail}
+          error={errors.fullName?.message}
+          {...register('fullName')}
+        />
         <Input
           label="Email"
           type="email"
           autoComplete="off"
+          disabled={loadingDetail}
           error={errors.email?.message}
           {...register('email')}
         />
         <Select
           label="Tipo de usuario"
           error={errors.userTypeId?.message}
-          disabled={userCompanyLoading}
+          disabled={loadingDetail}
           {...register('userTypeId')}
         >
           {userTypes?.map((type) => (
@@ -281,7 +296,7 @@ function EditUserForm({
         <Select
           label="Rol"
           error={errors.roleId?.message}
-          disabled={userCompanyLoading}
+          disabled={loadingDetail}
           {...register('roleId')}
         >
           {roles.map((role) => (
@@ -298,7 +313,7 @@ function EditUserForm({
         <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>
           Cancelar
         </Button>
-        <Button type="submit" loading={saving} disabled={userCompanyLoading}>
+        <Button type="submit" loading={saving} disabled={loadingDetail}>
           Guardar
         </Button>
       </div>

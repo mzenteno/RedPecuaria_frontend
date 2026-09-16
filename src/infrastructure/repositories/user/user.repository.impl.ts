@@ -1,5 +1,5 @@
-import type { UserRepository } from '@/domain/user/user.repository';
-import type { User, CreateUserData, UpdateUserData, ChangePasswordData } from '@/domain/user/user.entity';
+import type { UserRepository, ListUserOptionsParams } from '@/domain/user/user.repository';
+import type { User, UserListItem, UserOption, CreateUserData, UpdateUserData, ChangePasswordData } from '@/domain/user/user.entity';
 import type { PaginatedResult, PaginationParams } from '@/domain/common/paginated-result';
 import { httpClient } from '../../http/http-client';
 
@@ -15,14 +15,23 @@ function buildQuery(params: PaginationParams): string {
 }
 
 export class UserRepositoryImpl implements UserRepository {
-  async list(params: PaginationParams): Promise<PaginatedResult<User>> {
-    const result = await httpClient.getPaginated<User>(`/users?${buildQuery(params)}`);
+  async list(params: PaginationParams): Promise<PaginatedResult<UserListItem>> {
+    const result = await httpClient.getPaginated<UserListItem>(`/users?${buildQuery(params)}`);
     return {
       items: result.items,
       total: result.total,
       page: result.page,
       pageSize: result.pageSize,
     };
+  }
+
+  async listOptions(params?: ListUserOptionsParams): Promise<UserOption[]> {
+    const query = params?.userTypeId ? `?userTypeId=${params.userTypeId}` : '';
+    return httpClient.get<UserOption[]>(`/users/options${query}`);
+  }
+
+  async getById(id: string): Promise<User> {
+    return httpClient.get<User>(`/users/${id}`);
   }
 
   async create(data: CreateUserData): Promise<User> {

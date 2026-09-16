@@ -1,5 +1,4 @@
-import type { PaginatedResult } from '@/domain/common/paginated-result';
-import type { KardexEntryListItem } from './kardex-entry.entity';
+import type { KardexEntriesPage } from './kardex-entry.repository';
 
 export interface ListKardexEntriesParams {
   investmentId: string;
@@ -9,5 +8,5 @@ export interface ListKardexEntriesParams {
 }
 
 export interface ListKardexEntriesByInvestmentUseCase {
-  execute(params: ListKardexEntriesParams): Promise<PaginatedResult<KardexEntryListItem>>;
+  execute(params: ListKardexEntriesParams): Promise<KardexEntriesPage>;
 }

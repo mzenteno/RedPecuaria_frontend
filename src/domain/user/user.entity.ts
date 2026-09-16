@@ -3,10 +3,34 @@ export interface User {
   username: string;
   email: string;
   fullName: string;
-  isDeleted: boolean;
   userTypeId: string;
   lastLoginAt: string | null;
   createdAt: string;
+}
+
+/** Solo para el listado (`GET /users`) — forma propia, no `extends User`:
+ * el backend ya no manda `userTypeId` acá (dato muerto una vez resuelto
+ * `userTypeName` con JOIN, ver `docs/user/changes/...`), así que declararlo
+ * iría en contra de lo que de verdad llega en el JSON. Donde hace falta el
+ * id del tipo (`UserDialog`) hay que resolverlo a partir de `userTypeName`,
+ * no leer un campo que ya no existe. */
+export interface UserListItem {
+  id: string;
+  username: string;
+  email: string;
+  fullName: string;
+  userTypeName: string;
+  lastLoginAt: string | null;
+  createdAt: string;
+}
+
+/** Forma mínima para un combo (`GET /users/options`) — a propósito NO
+ * `extends User`: el backend solo manda `id`+`fullName` acá (ver
+ * `docs/user/changes/...`). Usado por `useInvestorUsers` (combo
+ * "Inversionista" de `InvestmentDialog`, tabla/PDF de Kardex). */
+export interface UserOption {
+  id: string;
+  fullName: string;
 }
 
 /** Alta: además de los datos del usuario, exige elegir con qué rol arranca

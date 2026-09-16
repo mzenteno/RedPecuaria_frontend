@@ -2,7 +2,6 @@ export interface Role {
   id: string;
   companyId: string;
   name: string;
-  isDeleted: boolean;
   createdAt: string;
 }
 

@@ -1,5 +1,5 @@
 import type { PropertyRepository } from '@/domain/property/property.repository';
-import type { Property, CreatePropertyData, UpdatePropertyData } from '@/domain/property/property.entity';
+import type { Property, PropertyOption, CreatePropertyData, UpdatePropertyData } from '@/domain/property/property.entity';
 import type { PaginatedResult, PaginationParams } from '@/domain/common/paginated-result';
 import { httpClient } from '../../http/http-client';
 
@@ -23,6 +23,10 @@ export class PropertyRepositoryImpl implements PropertyRepository {
       page: result.page,
       pageSize: result.pageSize,
     };
+  }
+
+  async listOptions(): Promise<PropertyOption[]> {
+    return httpClient.get<PropertyOption[]>('/properties/options');
   }
 
   async create(data: CreatePropertyData): Promise<Property> {

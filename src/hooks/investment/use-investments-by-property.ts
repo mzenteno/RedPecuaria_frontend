@@ -15,8 +15,7 @@ const INVESTMENTS_BY_PROPERTY_KEY = 'investments-by-property';
 /** De una propiedad puntual, para cualquier gestión — "Propiedad" dispara
  * la consulta por sí sola (sin "Gestión" ni "Inversionista" elegidos),
  * paginado en el servidor. Mismo criterio que `useInvestmentsByGestion`/
- * `useInvestmentsByInvestor` — no confundir con `useInvestments` (sin
- * paginar, usado por el atajo "Ver kardex"). */
+ * `useInvestmentsByInvestor`. */
 export function useInvestmentsByProperty(params: ListInvestmentsByPropertyPaginatedParams | null) {
   const queryClient = useQueryClient();
   const queryKey = [INVESTMENTS_BY_PROPERTY_KEY, params];

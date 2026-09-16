@@ -9,7 +9,7 @@ import { useInvestmentsByProperty } from '@/hooks/investment/use-investments-by-
 import { useInvestmentsByInvestor } from '@/hooks/investment/use-investments-by-investor';
 import { useInvestorUsers } from '@/hooks/user/use-investor-users';
 import { usePermission } from '@/hooks/menu/use-permission';
-import type { Investment } from '@/domain/investment/investment.entity';
+import type { InvestmentListItem } from '@/domain/investment/investment.entity';
 import type { ListInvestmentsByGestionParams } from '@/domain/investment/list-investments-by-gestion.use-case';
 import type { ListInvestmentsByPropertyPaginatedParams } from '@/domain/investment/list-investments-by-property-paginated.use-case';
 import type { ListInvestmentsByInvestorParams } from '@/domain/investment/list-investments-by-investor.use-case';
@@ -34,7 +34,7 @@ const GESTION_YEARS = Array.from({ length: 8 }, (_, i) => CURRENT_YEAR + 1 - i);
 interface DialogState {
   open: boolean;
   mode: 'create' | 'edit';
-  investment: Investment | null;
+  investment: InvestmentListItem | null;
   sessionId: number;
 }
 
@@ -75,7 +75,7 @@ function InvestmentsPageContent() {
     investment: null,
     sessionId: 0,
   });
-  const [pendingDeactivate, setPendingDeactivate] = useState<Investment | null>(null);
+  const [pendingDeactivate, setPendingDeactivate] = useState<InvestmentListItem | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Búsqueda de servidor: como el listado pagina de verdad, un filtro que
@@ -167,19 +167,20 @@ function InvestmentsPageContent() {
     activeMode === 'investor' ? byInvestor : activeMode === 'property' ? byProperty : byGestion;
   const { investors } = useInvestorUsers();
 
-  /** `investmentId`/`investmentPropertyId` son para que `kardex/page.tsx`
-   * resuelva ESA inversión puntual (no hay `GET /investments/:id`, busca
-   * dentro de las de su propiedad) — el resto (`gestion`/`propertyId`/
+  /** `investmentId` es para que `kardex/page.tsx` pida `GET
+   * /investments/:id` y resuelva de una toda la inversión puntual (antes
+   * hacía falta mandar también `investmentPropertyId` para buscarla dentro
+   * de la lista de su propiedad — ya no, ese endpoint devuelve todo, ver
+   * el change de este cambio). El resto (`gestion`/`propertyId`/
    * `investorUserId`/`search`/`page`) son los filtros que tiene ESTA
    * pantalla ahora mismo, para que "Volver a Inversiones" los reconstruya
    * tal cual, sin inventar un filtro de Propiedad a partir de la inversión
    * que se abrió (bug real: antes pasaba `investment.propertyId` como si
    * fuera el filtro de Propiedad de la pantalla, aunque no hubiera ninguno
    * elegido). */
-  function buildKardexShortcutQuery(investment: Investment): string {
+  function buildKardexShortcutQuery(investment: InvestmentListItem): string {
     const params = new URLSearchParams();
     params.set('investmentId', investment.id);
-    params.set('investmentPropertyId', investment.propertyId);
     if (gestion) params.set('gestion', gestion);
     if (propertyId) params.set('propertyId', propertyId);
     if (investorUserId) params.set('investorUserId', investorUserId);
@@ -192,7 +193,7 @@ function InvestmentsPageContent() {
     setDialog((prev) => ({ open: true, mode: 'create', investment: null, sessionId: prev.sessionId + 1 }));
   }
 
-  function openEdit(investment: Investment): void {
+  function openEdit(investment: InvestmentListItem): void {
     setDialog((prev) => ({ open: true, mode: 'edit', investment, sessionId: prev.sessionId + 1 }));
   }
 
@@ -298,7 +299,6 @@ function InvestmentsPageContent() {
             <InvestmentTable
               investments={investments}
               investors={investors}
-              properties={properties}
               loading={isLoading}
               canEdit={canEdit}
               canDelete={canDelete}

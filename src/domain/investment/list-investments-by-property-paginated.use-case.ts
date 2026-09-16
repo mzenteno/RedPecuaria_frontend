@@ -1,5 +1,5 @@
 import type { PaginatedResult } from '@/domain/common/paginated-result';
-import type { Investment } from './investment.entity';
+import type { InvestmentListItem } from './investment.entity';
 
 export interface ListInvestmentsByPropertyPaginatedParams {
   propertyId: string;
@@ -11,5 +11,5 @@ export interface ListInvestmentsByPropertyPaginatedParams {
 }
 
 export interface ListInvestmentsByPropertyPaginatedUseCase {
-  execute(params: ListInvestmentsByPropertyPaginatedParams): Promise<PaginatedResult<Investment>>;
+  execute(params: ListInvestmentsByPropertyPaginatedParams): Promise<PaginatedResult<InvestmentListItem>>;
 }

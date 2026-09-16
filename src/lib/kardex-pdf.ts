@@ -1,14 +1,8 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import type { KardexEntryListItem } from '@/domain/kardex/kardex-entry.entity';
-import type { MovementType } from '@/domain/movement-type/movement-type.entity';
 import { formatDateOnly } from './format-date';
-
-const NUMBER_FORMAT = new Intl.NumberFormat('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-function formatNumber(value: number): string {
-  return NUMBER_FORMAT.format(value);
-}
+import { formatNumber } from './format-number';
 
 export interface KardexPdfParams {
   propertyName: string;
@@ -16,7 +10,6 @@ export interface KardexPdfParams {
   gestion: number;
   investors: { id: string; fullName: string }[];
   entries: KardexEntryListItem[];
-  movementTypes: MovementType[];
 }
 
 /**
@@ -32,14 +25,10 @@ export interface KardexPdfParams {
  * pedido del usuario) — la propiedad ya identifica de sobra la inversión.
  */
 export function downloadKardexPdf(params: KardexPdfParams): void {
-  const { propertyName, investmentDescription, gestion, investors, entries, movementTypes } = params;
+  const { propertyName, investmentDescription, gestion, investors, entries } = params;
 
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
-
-  // Nombre completo, no iniciales — a pedido del usuario.
-  const investorNameById = new Map(investors.map((investor) => [investor.id, investor.fullName]));
-  const movementTypeNameById = new Map(movementTypes.map((type) => [type.id, type.name]));
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
@@ -71,21 +60,22 @@ export function downloadKardexPdf(params: KardexPdfParams): void {
       { content: 'Entrada', colSpan: 2 },
       { content: 'Salida', colSpan: 2 },
       { content: 'Saldo', colSpan: 2 },
+      { content: 'Debe', rowSpan: 2 },
+      { content: 'Haber', rowSpan: 2 },
       { content: 'Firma', rowSpan: 2 },
     ],
     ['Cant.', 'Kilos', 'Cant.', 'Kilos', 'Cant.', 'Kilos'],
   ];
 
   const body = entries.map((entry) => {
-    const movementTypeName = movementTypeNameById.get(entry.movementTypeId);
-    const isIngreso = movementTypeName === 'ingreso';
-    const isBaja = movementTypeName === 'baja';
-    const isVenta = movementTypeName === 'venta';
+    const isIngreso = entry.movementTypeName === 'ingreso';
+    const isBaja = entry.movementTypeName === 'baja';
+    const isVenta = entry.movementTypeName === 'venta';
 
     return [
       formatDateOnly(entry.entryDate),
       entry.detail,
-      entry.investorUserId ? (investorNameById.get(entry.investorUserId) ?? '') : '',
+      entry.investorName ?? '',
       formatNumber(entry.avgWeight),
       isIngreso ? String(entry.entryQuantity) : '-',
       isIngreso ? formatNumber(entry.entryKilos) : '-',
@@ -93,6 +83,8 @@ export function downloadKardexPdf(params: KardexPdfParams): void {
       isVenta ? formatNumber(entry.exitKilos) : '-',
       String(entry.runningBalanceQuantity),
       formatNumber(entry.runningBalanceKilos),
+      formatNumber(entry.debe),
+      formatNumber(entry.haber),
       '',
     ];
   });

@@ -15,8 +15,8 @@ function kardexKey(investmentId: string) {
 
 /** El kardex es siempre de una inversión puntual — sin `investmentId`
  * (todavía no se eligió Propiedad + Inversión en los combobox de la
- * pantalla) la query queda deshabilitada, igual criterio que
- * `useInvestments`. Paginado en el servidor (ver ARCHITECTURE.md §8/§9). */
+ * pantalla) la query queda deshabilitada. Paginado en el servidor (ver
+ * ARCHITECTURE.md §8/§9). */
 export function useKardexEntries(investmentId: string | null, page: number, pageSize: number, search: string) {
   const queryClient = useQueryClient();
   const queryKey = [...kardexKey(investmentId ?? 'none'), page, pageSize, search];
@@ -60,6 +60,10 @@ export function useKardexEntries(investmentId: string | null, page: number, page
     entries: data?.items ?? [],
     total: data?.total ?? 0,
     totalPages: Math.max(1, Math.ceil((data?.total ?? 0) / pageSize)),
+    // Debe/Haber de TODO el historial activo (no solo la página) — para el
+    // footer de la tabla, ver `KardexTable`.
+    totalDebe: data?.totalDebe ?? 0,
+    totalHaber: data?.totalHaber ?? 0,
     isLoading,
     createEntry,
     updateEntry: (id: string, data: UpdateKardexEntryData) => updateEntryMutation({ id, data }),

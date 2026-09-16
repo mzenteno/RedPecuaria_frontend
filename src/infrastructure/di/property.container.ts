@@ -2,6 +2,7 @@ import { CreatePropertyUseCaseImpl } from '@/application/property/create-propert
 import { UpdatePropertyUseCaseImpl } from '@/application/property/update-property.use-case.impl';
 import { DeactivatePropertyUseCaseImpl } from '@/application/property/deactivate-property.use-case.impl';
 import { ListPropertiesUseCaseImpl } from '@/application/property/list-properties.use-case.impl';
+import { ListPropertyOptionsUseCaseImpl } from '@/application/property/list-property-options.use-case.impl';
 import { PropertyRepositoryImpl } from '../repositories/property/property.repository.impl';
 
 export const propertyRepository = new PropertyRepositoryImpl();
@@ -9,3 +10,4 @@ export const createPropertyUseCase = new CreatePropertyUseCaseImpl(propertyRepos
 export const updatePropertyUseCase = new UpdatePropertyUseCaseImpl(propertyRepository);
 export const deactivatePropertyUseCase = new DeactivatePropertyUseCaseImpl(propertyRepository);
 export const listPropertiesUseCase = new ListPropertiesUseCaseImpl(propertyRepository);
+export const listPropertyOptionsUseCase = new ListPropertyOptionsUseCaseImpl(propertyRepository);

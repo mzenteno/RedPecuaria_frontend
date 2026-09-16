@@ -3,14 +3,12 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Download } from 'lucide-react';
-import { usePropertyOptions } from '@/hooks/property/use-property-options';
-import { useInvestments } from '@/hooks/investment/use-investments';
 import { useMyInvestments } from '@/hooks/investment/use-my-investments';
+import { useInvestmentById } from '@/hooks/investment/use-investment-by-id';
 import { useKardexEntries } from '@/hooks/kardex/use-kardex-entries';
 import { useInvestorUsers } from '@/hooks/user/use-investor-users';
-import { useMovementTypes } from '@/hooks/movement-type/use-movement-types';
 import { usePermission } from '@/hooks/menu/use-permission';
-import type { KardexEntry, KardexEntryFields, KardexEntryListItem } from '@/domain/kardex/kardex-entry.entity';
+import type { KardexEntryFields, KardexEntryListItem } from '@/domain/kardex/kardex-entry.entity';
 import { PageToolbar } from '@/components/ui/page-toolbar';
 import { Pagination } from '@/components/ui/pagination';
 import { Button } from '@/components/ui/button';
@@ -21,6 +19,7 @@ import { RequirePermission } from '@/components/auth/require-permission';
 import { ApiError } from '@/infrastructure/http/http-client';
 import { listKardexEntriesByInvestmentUseCase } from '@/infrastructure/di/kardex.container';
 import { downloadKardexPdf } from '@/lib/kardex-pdf';
+import { formatNumber } from '@/lib/format-number';
 
 // Menú propio, independiente de "Inversiones" (§14 de ARCHITECTURE.md): un
 // rol puede tener acceso a Kardex sin tener acceso al CRUD de Inversiones
@@ -35,12 +34,11 @@ const ENTRIES_PAGE_SIZE = 20;
 // de pedir todo de una (ver `fetchAllKardexEntries`).
 const PDF_FETCH_PAGE_SIZE = 100;
 const SEARCH_DEBOUNCE_MS = 300;
-const NUMBER_FORMAT = new Intl.NumberFormat('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 interface DialogState {
   open: boolean;
   mode: 'create' | 'edit';
-  entry: KardexEntry | null;
+  entry: KardexEntryListItem | null;
   sessionId: number;
 }
 
@@ -67,7 +65,7 @@ async function fetchAllKardexEntries(investmentId: string): Promise<KardexEntryL
 
 export default function KardexPage() {
   const searchParams = useSearchParams();
-  // Ir de "/kardex?investmentId=&investmentPropertyId=&..." (atajo) a
+  // Ir de "/kardex?investmentId=&..." (atajo) a
   // "/kardex" (clic directo en el ítem del sidebar) es la MISMA ruta — Next
   // no remonta el componente solo porque cambia el query string, así que el
   // estado local (`investmentId`, etc.) quedaba pegado del clic anterior.
@@ -82,27 +80,28 @@ export default function KardexPage() {
 function KardexPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { properties } = usePropertyOptions();
   // Atajo desde la tabla de Inversiones ("Ver kardex"): llega con
-  // `investmentId` + `investmentPropertyId` (la propiedad de ESA inversión
-  // puntual, para poder resolver sus datos — no hay `GET /investments/:id`,
-  // se busca dentro de `useInvestments(propertyId)`) más TODOS los filtros
+  // `investmentId` (el id de ESA inversión puntual) más TODOS los filtros
   // que tenía activos la pantalla de Inversiones (`gestion`/`propertyId`/
   // `investorUserId`/`search`/`page`, con esos mismos nombres). `returnQuery`
-  // es esa misma URL de llegada, sin los dos primeros — así "Volver a
-  // Inversiones" restaura EXACTAMENTE los filtros que había antes, en vez
-  // de inventar unos nuevos a partir de la inversión puntual que se abrió
-  // (bug real: antes reusaba `investmentPropertyId` como si fuera el filtro
-  // de Propiedad que tenía la pantalla, aunque no hubiera ninguno elegido).
-  const [investmentPropertyId] = useState<string | null>(() => searchParams.get('investmentPropertyId'));
+  // es esa misma URL de llegada, sin el primero — así "Volver a Inversiones"
+  // restaura EXACTAMENTE los filtros que había antes, en vez de inventar
+  // unos nuevos a partir de la inversión puntual que se abrió (bug real:
+  // antes reusaba la propiedad de esa inversión como si fuera el filtro de
+  // Propiedad que tenía la pantalla, aunque no hubiera ninguno elegido).
+  //
+  // Todos los datos de la inversión (propiedad, gestión, descripción,
+  // inversionistas, saldo) salen de `useInvestmentById(investmentId)` más
+  // abajo — un solo `GET /investments/:id`, no hace falta pedir la lista
+  // completa de una propiedad para buscar adentro la fila puntual (bug
+  // real, ver el change de este cambio).
+  const [isShortcut] = useState<boolean>(() => searchParams.get('investmentId') !== null);
   const [investmentId, setInvestmentId] = useState<string | null>(() => searchParams.get('investmentId'));
   const [returnQuery] = useState<string>(() => {
     const params = new URLSearchParams(searchParams.toString());
     params.delete('investmentId');
-    params.delete('investmentPropertyId');
     return params.toString();
   });
-  const isShortcut = investmentPropertyId !== null;
   const [myInvestmentsPage, setMyInvestmentsPage] = useState(1);
 
   const {
@@ -110,12 +109,9 @@ function KardexPageContent() {
     total: myInvestmentsTotal,
     totalPages: myInvestmentsTotalPages,
     isLoading: myInvestmentsLoading,
-  } = useMyInvestments(myInvestmentsPage, MY_INVESTMENTS_PAGE_SIZE);
-  const { investments: shortcutInvestments } = useInvestments(investmentPropertyId);
+  } = useMyInvestments(myInvestmentsPage, MY_INVESTMENTS_PAGE_SIZE, investmentId === null);
   const { canCreate, canEdit, canDelete } = usePermission(MENU_KEY);
   const { investors: allInvestors } = useInvestorUsers();
-  const { data: movementTypesData } = useMovementTypes();
-  const movementTypes = movementTypesData ?? [];
   const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   const [searchInput, setSearchInput] = useState('');
@@ -137,6 +133,8 @@ function KardexPageContent() {
     entries,
     total: entriesTotal,
     totalPages: entriesTotalPages,
+    totalDebe,
+    totalHaber,
     isLoading,
     createEntry,
     updateEntry,
@@ -149,27 +147,25 @@ function KardexPageContent() {
     entry: null,
     sessionId: 0,
   });
-  const [pendingDeactivate, setPendingDeactivate] = useState<KardexEntry | null>(null);
+  const [pendingDeactivate, setPendingDeactivate] = useState<KardexEntryListItem | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const selectedInvestment =
-    myInvestments.find((investment) => investment.id === investmentId) ??
-    shortcutInvestments.find((investment) => investment.id === investmentId) ??
-    null;
+  // Único fetch para toda la inversión puntual (propiedad, gestión,
+  // descripción, inversionistas, saldo) — `GET /investments/:id`, mismo
+  // criterio que `useUserById`. `myInvestments` (arriba) sigue existiendo
+  // solo para la pantalla "Mis inversiones" (elegir con cuál entrar), no
+  // para resolver esto.
+  const { data: investmentDetail } = useInvestmentById(investmentId);
   // Solo los inversionistas de ESTA inversión puntual, no todos los de la
   // empresa — para el combo de "Inversionista" del diálogo (movimientos de
   // tipo "venta") y para resolver el nombre en la tabla.
-  const investors = allInvestors.filter((investor) => selectedInvestment?.investorIds.includes(investor.id));
-
-  function propertyName(propertyId: string): string {
-    return properties.find((property) => property.id === propertyId)?.name ?? '—';
-  }
+  const investors = allInvestors.filter((investor) => investmentDetail?.investorIds.includes(investor.id));
 
   function openCreate(): void {
     setDialog((prev) => ({ open: true, mode: 'create', entry: null, sessionId: prev.sessionId + 1 }));
   }
 
-  function openEdit(entry: KardexEntry): void {
+  function openEdit(entry: KardexEntryListItem): void {
     setDialog((prev) => ({ open: true, mode: 'edit', entry, sessionId: prev.sessionId + 1 }));
   }
 
@@ -187,19 +183,18 @@ function KardexPageContent() {
   }
 
   async function handleDownloadPdf(): Promise<void> {
-    if (!investmentId || !selectedInvestment) return;
+    if (!investmentId || !investmentDetail) return;
     setDownloadingPdf(true);
     try {
       // Ignora la paginación de pantalla — trae el historial activo
       // completo para que el PDF no salga cortado en 20 filas.
       const allEntries = await fetchAllKardexEntries(investmentId);
       downloadKardexPdf({
-        propertyName: propertyName(selectedInvestment.propertyId),
-        investmentDescription: selectedInvestment.description,
-        gestion: selectedInvestment.gestion,
+        propertyName: investmentDetail.propertyName,
+        investmentDescription: investmentDetail.description,
+        gestion: investmentDetail.gestion,
         investors,
         entries: allEntries,
-        movementTypes,
       });
     } catch (err) {
       setErrorMessage(err instanceof ApiError ? err.message : 'Error al generar el PDF');
@@ -248,7 +243,7 @@ function KardexPageContent() {
                       onClick={() => setInvestmentId(investment.id)}
                       className="cursor-pointer"
                     >
-                      <td>{propertyName(investment.propertyId)}</td>
+                      <td>{investment.propertyName}</td>
                       <td>{investment.gestion}</td>
                       <td>{investment.description}</td>
                     </tr>
@@ -292,16 +287,16 @@ function KardexPageContent() {
       <div className="mb-6 flex items-start justify-between gap-4">
         <div className="flex flex-col gap-1">
           <h1 className="tipo-titulo-card">
-            Kardex{selectedInvestment ? ` — ${selectedInvestment.description} (${selectedInvestment.gestion})` : ''}
+            Kardex{investmentDetail ? ` — ${investmentDetail.description} (${investmentDetail.gestion})` : ''}
           </h1>
-          {selectedInvestment && (
+          {investmentDetail && (
             <p className="tipo-secundario">
-              Saldo actual: {selectedInvestment.balanceQuantity} cabezas ·{' '}
-              {NUMBER_FORMAT.format(selectedInvestment.balanceKilos)} kg
+              Saldo actual: {investmentDetail.balanceQuantity} cabezas ·{' '}
+              {formatNumber(investmentDetail.balanceKilos)} kg
             </p>
           )}
         </div>
-        {selectedInvestment && (
+        {investmentDetail && (
           <Button type="button" variant="secondary" onClick={handleDownloadPdf} loading={downloadingPdf} className="shrink-0">
             <Download className="h-4 w-4" strokeWidth={1.5} />
             Descargar PDF
@@ -318,7 +313,8 @@ function KardexPageContent() {
         />
         <KardexTable
           entries={entries}
-          investors={investors}
+          totalDebe={totalDebe}
+          totalHaber={totalHaber}
           loading={isLoading}
           canEdit={canEdit}
           canDelete={canDelete}

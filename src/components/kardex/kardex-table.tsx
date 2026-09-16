@@ -1,25 +1,20 @@
 import { Pencil, Trash2 } from 'lucide-react';
-import type { KardexEntry, KardexEntryListItem } from '@/domain/kardex/kardex-entry.entity';
-import type { User } from '@/domain/user/user.entity';
-import { useMovementTypes } from '@/hooks/movement-type/use-movement-types';
+import type { KardexEntryListItem } from '@/domain/kardex/kardex-entry.entity';
 import { formatDateOnly } from '@/lib/format-date';
+import { formatNumber } from '@/lib/format-number';
 
 interface KardexTableProps {
   entries: KardexEntryListItem[];
-  /** Inversionistas de la inversión activa — para mostrar el nombre en vez
-   * del id en la columna "Inversionista". */
-  investors: User[];
+  /** Suma de Debe/Haber de TODO el historial activo de la inversión — no
+   * de `entries` (la página que se ve), que daría un total incompleto si
+   * hay más de una página. Vienen ya calculados del backend. */
+  totalDebe: number;
+  totalHaber: number;
   loading: boolean;
   canEdit: boolean;
   canDelete: boolean;
-  onEdit: (entry: KardexEntry) => void;
-  onDeactivate: (entry: KardexEntry) => void;
-}
-
-const NUMBER_FORMAT = new Intl.NumberFormat('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-function formatNumber(value: number): string {
-  return NUMBER_FORMAT.format(value);
+  onEdit: (entry: KardexEntryListItem) => void;
+  onDeactivate: (entry: KardexEntryListItem) => void;
 }
 
 function capitalize(name: string): string {
@@ -31,14 +26,34 @@ function capitalize(name: string): string {
  * al leer, con una función de ventana SQL sobre todo el historial de la
  * inversión, nunca los guarda (ver `docs/investment/investment.md` del
  * backend). Distinto del saldo VIGENTE de la inversión, que se muestra
- * arriba de esta tabla ("Saldo actual", en `page.tsx`). */
-export function KardexTable({ entries, investors, loading, canEdit, canDelete, onEdit, onDeactivate }: KardexTableProps) {
-  // Catálogo real (`GET /kardex-movement-types`), no 3 strings hardcodeados
-  // — ver `KardexEntryDialog`. `staleTime` de 60s en el hook, así que no
-  // duplica el request si el diálogo ya lo pidió.
-  const { data: movementTypesData } = useMovementTypes();
-  const movementTypes = movementTypesData ?? [];
-
+ * arriba de esta tabla ("Saldo actual", en `page.tsx`).
+ *
+ * "Debe"/"Haber" son la reformulación contable de `total` según el tipo de
+ * movimiento (Ingreso = Debe, Venta/Baja = Haber) — ya vienen resueltas del
+ * backend, acá solo se pintan. El footer es UNA sola fila ("TOTAL" +
+ * `totalDebe`/`totalHaber` de TODO el historial, no de `entries`) — el resto
+ * de columnas van con un `<td></td>` vacío cada una (sin `colSpan`, un
+ * `<td>` por columna es más verboso pero más robusto).
+ *
+ * OJO: las celdas de este footer usan `font-semibold`, NUNCA `tipo-label`
+ * — esa clase trae `display: block` (ver `globals.css`), pensada para
+ * labels de formulario/badges DENTRO de otro elemento, no para ponerla
+ * directo en un `<td>`. Aplicada sobre la celda misma le rompe el
+ * `display: table-cell` y desarma el layout de toda la fila (bug real,
+ * encontrado en vivo con el inspector — verificado que la sacar la clase
+ * arregla el layout). Sin cálculo de ganancia/pérdida todavía — a pedido
+ * del usuario, se saca del footer por ahora (queda pendiente para más
+ * adelante). */
+export function KardexTable({
+  entries,
+  totalDebe,
+  totalHaber,
+  loading,
+  canEdit,
+  canDelete,
+  onEdit,
+  onDeactivate,
+}: KardexTableProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -47,18 +62,8 @@ export function KardexTable({ entries, investors, loading, canEdit, canDelete, o
     );
   }
 
-  function investorName(investorUserId: string | null): string {
-    if (!investorUserId) return '—';
-    return investors.find((investor) => investor.id === investorUserId)?.fullName ?? '—';
-  }
-
-  function movementTypeLabel(movementTypeId: string): string {
-    const name = movementTypes.find((type) => type.id === movementTypeId)?.name;
-    return name ? capitalize(name) : '—';
-  }
-
   const showActions = canEdit || canDelete;
-  const columnCount = showActions ? 12 : 11;
+  const columnCount = showActions ? 14 : 13;
 
   return (
     <div className="data-table-wrapper">
@@ -77,6 +82,8 @@ export function KardexTable({ entries, investors, loading, canEdit, canDelete, o
             <th colSpan={2} className="text-center">Entrada</th>
             <th colSpan={2} className="text-center">Salida</th>
             <th colSpan={2} className="text-center">Saldo</th>
+            <th rowSpan={2} className="text-right">Debe</th>
+            <th rowSpan={2} className="text-right">Haber</th>
             {showActions && <th rowSpan={2} className="text-center">Acciones</th>}
           </tr>
           <tr>
@@ -93,8 +100,8 @@ export function KardexTable({ entries, investors, loading, canEdit, canDelete, o
             <tr key={entry.id}>
               <td>{formatDateOnly(entry.entryDate)}</td>
               <td>{entry.detail}</td>
-              <td>{movementTypeLabel(entry.movementTypeId)}</td>
-              <td>{investorName(entry.investorUserId)}</td>
+              <td>{capitalize(entry.movementTypeName)}</td>
+              <td>{entry.investorName ?? '—'}</td>
               <td className="text-right">{formatNumber(entry.avgWeight)}</td>
               <td className="text-right">{entry.entryQuantity}</td>
               <td className="text-right">{formatNumber(entry.entryKilos)}</td>
@@ -102,6 +109,8 @@ export function KardexTable({ entries, investors, loading, canEdit, canDelete, o
               <td className="text-right">{formatNumber(entry.exitKilos)}</td>
               <td className="text-right">{entry.runningBalanceQuantity}</td>
               <td className="text-right">{formatNumber(entry.runningBalanceKilos)}</td>
+              <td className="text-right">{formatNumber(entry.debe)}</td>
+              <td className="text-right">{formatNumber(entry.haber)}</td>
               {showActions && (
                 <td>
                   <div className="flex items-center justify-center gap-1">
@@ -138,6 +147,24 @@ export function KardexTable({ entries, investors, loading, canEdit, canDelete, o
             </tr>
           )}
         </tbody>
+        <tfoot>
+          <tr>
+            <td className="font-semibold">TOTAL</td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td className="text-right font-semibold">{formatNumber(totalDebe)}</td>
+            <td className="text-right font-semibold">{formatNumber(totalHaber)}</td>
+            {showActions && <td />}
+          </tr>
+        </tfoot>
       </table>
     </div>
   );

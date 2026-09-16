@@ -1,24 +1,24 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { listPropertiesUseCase } from '@/infrastructure/di/property.container';
+import { listPropertyOptionsUseCase } from '@/infrastructure/di/property.container';
 
-// Sin paginación real acá a propósito (fase 1, mismo criterio que
-// `useInvestorUsers`): trae hasta 100 propiedades de la empresa activa —
-// si una empresa llega a tener más, hay que pasar esto a un combo con
-// búsqueda real de servidor, no está hecho todavía.
-const PAGE_SIZE = 100;
-
-/** Todas las propiedades de la empresa activa (hasta 100), para un combo o
- * para resolver un nombre a partir de un `propertyId` — a diferencia de
- * `useProperties`, que pagina de verdad para la pantalla de Propiedades en
- * sí. Usado por Inversiones (combo "Propiedad") y Kardex (nombre de la
- * propiedad de cada inversión). */
+/** Todas las propiedades de la empresa activa (`id`+`name`, sin paginar),
+ * para un combo o para resolver un nombre a partir de un `propertyId` — a
+ * diferencia de `useProperties`, que pagina de verdad para la pantalla de
+ * Propiedades en sí. Usado por Inversiones (combo "Propiedad") y Kardex
+ * (nombre de la propiedad de cada inversión).
+ *
+ * `GET /properties/options` — endpoint propio, liviano (no reusa el
+ * paginado de la grilla CRUD): antes esto pedía `GET /properties` con
+ * `pageSize=100` (el tope del endpoint paginado) como forma de "traer
+ * todo de una", lo que se rompía silenciosamente si una empresa pasaba de
+ * 100 propiedades (ver `docs/property/changes/...`). */
 export function usePropertyOptions() {
   const { data, isLoading } = useQuery({
     queryKey: ['property-options'],
-    queryFn: () => listPropertiesUseCase.execute({ page: 1, pageSize: PAGE_SIZE }),
+    queryFn: () => listPropertyOptionsUseCase.execute(),
   });
 
-  return { properties: data?.items ?? [], isLoading };
+  return { properties: data ?? [], isLoading };
 }
