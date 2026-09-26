@@ -14,10 +14,12 @@ export interface KardexPdfParams {
   investmentTypeName: string;
   investors: { id: string; fullName: string }[];
   entries: KardexEntryListItem[];
-  /** URL absoluta del logo de la empresa activa (`Company.logoUrl`, ver
-   * `docs/company/changes/2026-09-26-logo-de-empresa.md`) — `null` si esa
-   * empresa no tiene uno cargado, el encabezado queda solo con texto (igual
-   * que antes de que existiera esta opción). */
+  /** `Company.logoUrl` de la empresa activa — hoy un `data:` URI en base64
+   * (ver `docs/company/changes/2026-09-26-logo-en-base64-no-en-disco.md`),
+   * pero esta función no asume esa forma en particular, cualquier URL que
+   * `fetch()` sepa resolver sirve igual. `null` si esa empresa no tiene
+   * logo cargado — el encabezado queda solo con texto (igual que antes de
+   * que existiera esta opción). */
   companyLogoUrl: string | null;
 }
 
@@ -40,8 +42,8 @@ const LOGO_Y = 20;
  * el canvas quede "tainted" por CORS: en ese punto la imagen ya está en
  * memoria como bytes propios del navegador, no un recurso remoto.
  *
- * Devuelve `null` ante cualquier error (red, CORS, archivo borrado) — un
- * logo roto no debe impedir descargar el PDF, solo se lo salta.
+ * Devuelve `null` ante cualquier error — un logo roto no debe impedir
+ * descargar el PDF, solo se lo salta.
  */
 async function loadCompanyLogo(
   url: string,
