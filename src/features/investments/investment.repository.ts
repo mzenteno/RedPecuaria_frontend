@@ -1,12 +1,46 @@
 import type { PaginatedResult, PaginationParams } from '@/domain/common/paginated-result';
-import type { ListInvestmentsByGestionParams } from './list-investments-by-gestion.use-case';
-import type { ListInvestmentsByPropertyPaginatedParams } from './list-investments-by-property-paginated.use-case';
-import type { ListInvestmentsByInvestorParams } from './list-investments-by-investor.use-case';
 import type { Investment, InvestmentListItem, CreateInvestmentData, UpdateInvestmentData } from './investment.entity';
+
+export interface ListInvestmentsByGestionParams {
+  gestion: number;
+  page: number;
+  pageSize: number;
+  propertyId?: string;
+  investorUserId?: string;
+  search?: string;
+}
+
+export interface ListInvestmentsByPropertyPaginatedParams {
+  propertyId: string;
+  page: number;
+  pageSize: number;
+  gestion?: number;
+  investorUserId?: string;
+  search?: string;
+}
+
+export interface ListInvestmentsByInvestorParams {
+  investorUserId: string;
+  page: number;
+  pageSize: number;
+  propertyId?: string;
+  search?: string;
+}
 
 /** `companyId` nunca aparece: siempre la empresa activa. `propertyId` sí es
  * explícito — una empresa tiene varias propiedades, no hay una "propiedad
- * activa" de la sesión. */
+ * activa" de la sesión.
+ *
+ * Sin capa de "casos de uso" separada (a diferencia del backend): acá cada
+ * método de este repositorio YA ES la operación completa que un hook
+ * necesita — no hay ninguna orquestación de por medio (eso vive del lado
+ * del backend, ver `InvestmentWithInvestors` en
+ * `list-investments-by-property-paginated.use-case.ts`). Meter un caso de
+ * uso que solo hiciera `return this.investmentRepository.xxx(params)` sería
+ * una capa sin ningún propósito real — ver `docs/investment/changes/...`
+ * (arquitectura del frontend). El día que un hook necesite combinar más de
+ * una llamada o aplicar una regla propia del cliente, ESE es el momento de
+ * agregar un archivo de caso de uso acá, no antes. */
 export interface InvestmentRepository {
   /** De cualquier propiedad de la empresa activa, para una gestión puntual
    * — la pantalla de Inversiones elige "Gestión" primero, "Propiedad"/

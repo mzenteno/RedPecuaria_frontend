@@ -1,14 +1,9 @@
 'use client';
 
 import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  listInvestmentsByGestionUseCase,
-  createInvestmentUseCase,
-  updateInvestmentUseCase,
-  deactivateInvestmentUseCase,
-} from '@/infrastructure/di/investment.container';
-import type { CreateInvestmentData, UpdateInvestmentData } from '@/domain/investment/investment.entity';
-import type { ListInvestmentsByGestionParams } from '@/domain/investment/list-investments-by-gestion.use-case';
+import { investmentRepository } from '@/features/investments/investment.container';
+import type { CreateInvestmentData, UpdateInvestmentData } from '@/features/investments/investment.entity';
+import type { ListInvestmentsByGestionParams } from '@/features/investments/investment.repository';
 
 const INVESTMENTS_BY_GESTION_KEY = 'investments-by-gestion';
 
@@ -23,7 +18,7 @@ export function useInvestmentsByGestion(params: ListInvestmentsByGestionParams |
 
   const { data, isLoading } = useQuery({
     queryKey,
-    queryFn: () => listInvestmentsByGestionUseCase.execute(params as ListInvestmentsByGestionParams),
+    queryFn: () => investmentRepository.listByGestion(params as ListInvestmentsByGestionParams),
     enabled: params !== null,
     placeholderData: keepPreviousData,
   });
@@ -31,18 +26,17 @@ export function useInvestmentsByGestion(params: ListInvestmentsByGestionParams |
   const invalidate = () => queryClient.invalidateQueries({ queryKey: [INVESTMENTS_BY_GESTION_KEY] });
 
   const { mutateAsync: createInvestment } = useMutation({
-    mutationFn: (data: CreateInvestmentData) => createInvestmentUseCase.execute(data),
+    mutationFn: (data: CreateInvestmentData) => investmentRepository.create(data),
     onSuccess: invalidate,
   });
 
   const { mutateAsync: updateInvestmentMutation } = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: UpdateInvestmentData }) =>
-      updateInvestmentUseCase.execute(id, data),
+    mutationFn: ({ id, data }: { id: string; data: UpdateInvestmentData }) => investmentRepository.update(id, data),
     onSuccess: invalidate,
   });
 
   const { mutateAsync: deactivateInvestment } = useMutation({
-    mutationFn: (id: string) => deactivateInvestmentUseCase.execute(id),
+    mutationFn: (id: string) => investmentRepository.deactivate(id),
     onSuccess: invalidate,
   });
 

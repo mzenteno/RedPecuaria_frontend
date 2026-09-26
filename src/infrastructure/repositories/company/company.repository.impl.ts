@@ -18,4 +18,14 @@ export class CompanyRepositoryImpl implements CompanyRepository {
   async deactivate(id: string): Promise<void> {
     await httpClient.patch<void>(`/companies/${id}/deactivate`);
   }
+
+  async uploadLogo(id: string, file: File): Promise<Company> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return httpClient.postForm<Company>(`/companies/${id}/logo`, formData);
+  }
+
+  async removeLogo(id: string): Promise<Company> {
+    return httpClient.delete<Company>(`/companies/${id}/logo`);
+  }
 }

@@ -9,10 +9,12 @@ import { useInvestmentsByProperty } from '@/hooks/investment/use-investments-by-
 import { useInvestmentsByInvestor } from '@/hooks/investment/use-investments-by-investor';
 import { useInvestorUsers } from '@/hooks/user/use-investor-users';
 import { usePermission } from '@/hooks/menu/use-permission';
-import type { InvestmentListItem } from '@/domain/investment/investment.entity';
-import type { ListInvestmentsByGestionParams } from '@/domain/investment/list-investments-by-gestion.use-case';
-import type { ListInvestmentsByPropertyPaginatedParams } from '@/domain/investment/list-investments-by-property-paginated.use-case';
-import type { ListInvestmentsByInvestorParams } from '@/domain/investment/list-investments-by-investor.use-case';
+import type { InvestmentListItem } from '@/features/investments/investment.entity';
+import type {
+  ListInvestmentsByGestionParams,
+  ListInvestmentsByPropertyPaginatedParams,
+  ListInvestmentsByInvestorParams,
+} from '@/features/investments/investment.repository';
 import { Select } from '@/components/ui/select';
 import { PageToolbar } from '@/components/ui/page-toolbar';
 import { Pagination } from '@/components/ui/pagination';
@@ -203,6 +205,7 @@ function InvestmentsPageContent() {
 
   async function handleSave(data: {
     propertyId: string;
+    investmentTypeId: string;
     gestion: number;
     description: string;
     investorUserIds: string[];
@@ -212,9 +215,12 @@ function InvestmentsPageContent() {
       // Una inversión recién creada siempre arranca activa — `isFinished`
       // ni siquiera existe en `CreateInvestmentData` (el diálogo lo manda
       // igual porque comparte el mismo formulario, pero acá se descarta).
-      const { propertyId, gestion, description, investorUserIds } = data;
-      await createInvestment({ propertyId, gestion, description, investorUserIds });
+      const { propertyId, investmentTypeId, gestion, description, investorUserIds } = data;
+      await createInvestment({ propertyId, investmentTypeId, gestion, description, investorUserIds });
     } else if (dialog.investment) {
+      // `investmentTypeId` viaja igual (el diálogo lo manda siempre) pero
+      // no existe en `UpdateInvestmentData` ni en el DTO del backend — se
+      // ignora acá y el backend lo descartaría igual si llegara.
       await updateInvestment(dialog.investment.id, data);
     }
   }

@@ -94,10 +94,15 @@ async function requestEnvelope<T, M extends object = object>(
   isRetry = false,
 ): Promise<ApiSuccessEnvelope<T, M> | null> {
   const accessToken = getAccessToken();
+  // `FormData` (subida de archivos, ver `postForm`) nunca lleva
+  // `Content-Type` a mano — el navegador arma uno propio con el boundary
+  // multipart, que no se puede reproducir manualmente. Fijarlo igual (aunque
+  // sea "application/json") rompe el multipart del lado del servidor.
+  const isFormData = options.body instanceof FormData;
   const response = await fetch(`${BASE_URL}${path}`, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       ...options.headers,
     },
@@ -167,6 +172,9 @@ export const httpClient = {
   getPaginated,
   post: <T>(path: string, data?: unknown) =>
     request<T>(path, { method: 'POST', body: data !== undefined ? JSON.stringify(data) : undefined }),
+  /** Para subir archivos (ej. el logo de una empresa) — `formData` viaja
+   * como `multipart/form-data`, nunca como JSON. */
+  postForm: <T>(path: string, formData: FormData) => request<T>(path, { method: 'POST', body: formData }),
   patch: <T>(path: string, data?: unknown) =>
     request<T>(path, { method: 'PATCH', body: data !== undefined ? JSON.stringify(data) : undefined }),
   put: <T>(path: string, data?: unknown) =>

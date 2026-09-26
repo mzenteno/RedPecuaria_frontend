@@ -356,19 +356,22 @@ body {
   }
   /* Variante para diálogos con muchos campos (Usuario, Propiedad, Inversión,
      Kardex) — Empresa/Rol (un solo campo) se quedan con `.dialog-panel` a
-     secas. Por debajo de `sm`, en vez de un modal chico centrado con
-     margen oscuro a los costados que no aporta nada en una pantalla
-     angosta, pasa a ocupar toda la pantalla — mismo criterio que usa
-     cualquier app mobile con un formulario largo (Material Design/iOS: modal
-     chico solo para confirmaciones cortas, pantalla completa para
-     formularios). El panel entero scrollea como una sola región (título +
-     campos + Cancelar/Guardar juntos) — no hay header/footer fijos, es la
-     forma más simple que ya resuelve el problema real (dejar de desperdiciar
-     espacio) sin la complejidad extra de tres regiones scrolleables por
-     separado. Arriba de `sm` (tablet/desktop) es idéntico a `.dialog-panel`. */
+     secas. El panel entero scrollea como una sola región (título + campos +
+     Cancelar/Guardar juntos) — no hay header/footer fijos, es la forma más
+     simple que ya resuelve el problema real (contenido más alto que la
+     ventana, p. ej. el mapa de Propiedad) sin la complejidad extra de tres
+     regiones scrolleables por separado. Por debajo de `sm`, en vez de un
+     modal chico centrado con margen oscuro a los costados que no aporta
+     nada en una pantalla angosta, pasa a ocupar toda la pantalla — mismo
+     criterio que usa cualquier app mobile con un formulario largo (Material
+     Design/iOS: modal chico solo para confirmaciones cortas, pantalla
+     completa para formularios). */
+  .dialog-panel-lg {
+    @apply max-h-[90vh] overflow-y-auto;
+  }
   @media (max-width: 640px) {
     .dialog-panel-lg {
-      @apply fixed inset-0 max-w-none w-full h-full overflow-y-auto border-0;
+      @apply fixed inset-0 max-w-none w-full h-full max-h-none overflow-y-auto border-0;
     }
   }
   /* El espaciado entre el bloque de título/subtítulo, el campo y el footer

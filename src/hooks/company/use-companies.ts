@@ -6,6 +6,8 @@ import {
   createCompanyUseCase,
   updateCompanyUseCase,
   deactivateCompanyUseCase,
+  uploadCompanyLogoUseCase,
+  removeCompanyLogoUseCase,
 } from '@/infrastructure/di/company.container';
 import type { CreateCompanyData, UpdateCompanyData } from '@/domain/company/company.entity';
 
@@ -42,11 +44,23 @@ export function useCompanies() {
     onSuccess: invalidate,
   });
 
+  const { mutateAsync: uploadCompanyLogoMutation } = useMutation({
+    mutationFn: ({ id, file }: { id: string; file: File }) => uploadCompanyLogoUseCase.execute(id, file),
+    onSuccess: invalidate,
+  });
+
+  const { mutateAsync: removeCompanyLogoMutation } = useMutation({
+    mutationFn: (id: string) => removeCompanyLogoUseCase.execute(id),
+    onSuccess: invalidate,
+  });
+
   return {
     companies,
     isLoading,
     createCompany,
     updateCompany: (id: string, data: UpdateCompanyData) => updateCompanyMutation({ id, data }),
     deactivateCompany,
+    uploadCompanyLogo: (id: string, file: File) => uploadCompanyLogoMutation({ id, file }),
+    removeCompanyLogo: removeCompanyLogoMutation,
   };
 }

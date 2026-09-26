@@ -1,7 +1,7 @@
 'use client';
 
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { listMyInvestmentsUseCase } from '@/infrastructure/di/investment.container';
+import { investmentRepository } from '@/features/investments/investment.container';
 
 const MY_INVESTMENTS_KEY = 'investments-mine';
 
@@ -18,7 +18,7 @@ const MY_INVESTMENTS_KEY = 'investments-mine';
 export function useMyInvestments(page: number, pageSize: number, enabled = true) {
   const { data, isLoading } = useQuery({
     queryKey: [MY_INVESTMENTS_KEY, page, pageSize],
-    queryFn: () => listMyInvestmentsUseCase.execute({ page, pageSize }),
+    queryFn: () => investmentRepository.listMine({ page, pageSize }),
     placeholderData: keepPreviousData,
     enabled,
   });

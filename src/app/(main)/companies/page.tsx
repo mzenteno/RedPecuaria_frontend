@@ -36,7 +36,8 @@ export default function CompaniesPage() {
 }
 
 function CompaniesPageContent() {
-  const { companies, isLoading, createCompany, updateCompany, deactivateCompany } = useCompanies();
+  const { companies, isLoading, createCompany, updateCompany, deactivateCompany, uploadCompanyLogo, removeCompanyLogo } =
+    useCompanies();
   const { canCreate, canEdit, canDelete } = usePermission(MENU_KEY);
 
   const [search, setSearch] = useState('');
@@ -75,6 +76,17 @@ function CompaniesPageContent() {
     } else if (dialog.company) {
       await updateCompany(dialog.company.id, data);
     }
+  }
+
+  // `dialog.company` solo puede ser `null` en modo "create" — el diálogo no
+  // muestra la sección de logo en ese modo (ver `CompanyDialog`), así que
+  // estas dos nunca se llaman sin un id real.
+  async function handleUploadLogo(file: File): Promise<Company> {
+    return uploadCompanyLogo(dialog.company!.id, file);
+  }
+
+  async function handleRemoveLogo(): Promise<Company> {
+    return removeCompanyLogo(dialog.company!.id);
   }
 
   async function confirmDeactivate(): Promise<void> {
@@ -123,6 +135,8 @@ function CompaniesPageContent() {
         company={dialog.company}
         onClose={closeDialog}
         onSave={handleSave}
+        onUploadLogo={handleUploadLogo}
+        onRemoveLogo={handleRemoveLogo}
       />
 
       <ConfirmDialog

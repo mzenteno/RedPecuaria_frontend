@@ -31,7 +31,7 @@ const kardexEntrySchema = z.object({
   detail: z.string().min(1, 'El detalle es obligatorio'),
   movementTypeId: z.string().min(1, 'Selecciona un tipo de movimiento'),
   investorUserId: z.string().optional(),
-  avgWeight: numberField('El peso promedio'),
+  avgWeight: numberField('Este valor'),
   entryQuantity: numberField('La cantidad de entrada'),
   entryKilos: numberField('Los kilos de entrada'),
   exitQuantity: numberField('La cantidad de salida'),
@@ -48,21 +48,28 @@ interface KardexEntryDialogProps {
   /** Inversionistas de la inversión activa (ya resueltos a nombre) — para
    * el combo que solo se muestra cuando el tipo de movimiento es "venta". */
   investors: UserOption[];
+  /** 'kilo' o 'dinero' (`Investment.investmentTypeName`) — decide si este
+   * diálogo pide kilos (modo original) o no pide nada de kilos y usa
+   * `total` como el dato físico de Entrada/Salida (ver
+   * docs/investment/investment.md). Fijo por inversión, nunca cambia
+   * mientras el diálogo está abierto. */
+  investmentTypeName: string;
   onClose: () => void;
   onSave: (data: KardexEntryFields) => Promise<void>;
 }
 
 /** `entryQuantity`/`exitQuantity` son cabezas de ganado (enteros) — `toFixed`
- * no aplica ahí. `entryKilos`/`exitKilos`/`total` sí son decimales, se
- * cargan con 2 decimales fijos (`toFixed(2)`) para que el input no muestre
- * "36506" en vez de "36506.00" al editar un movimiento existente. */
+ * no aplica ahí. `avgWeight`/`entryKilos`/`exitKilos`/`total` sí son
+ * decimales, se cargan con 2 decimales fijos (`toFixed(2)`) para que el
+ * input no muestre "36506" en vez de "36506.00" al editar un movimiento
+ * existente. */
 function toFormValues(entry: KardexEntry | null): KardexEntryFormData {
   return {
     entryDate: entry?.entryDate ?? '',
     detail: entry?.detail ?? '',
     movementTypeId: entry?.movementTypeId ?? '',
     investorUserId: entry?.investorUserId ?? '',
-    avgWeight: entry ? String(entry.avgWeight) : '',
+    avgWeight: entry ? entry.avgWeight.toFixed(2) : '0.00',
     entryQuantity: entry ? String(entry.entryQuantity) : '0',
     entryKilos: entry ? entry.entryKilos.toFixed(2) : '0.00',
     exitQuantity: entry ? String(entry.exitQuantity) : '0',
@@ -75,14 +82,16 @@ function capitalize(name: string): string {
   return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
-/** `kilos / cantidad` — mismo cálculo para Ingreso (con los campos de
- * Entrada) y Venta (con los de Salida). `0` si la cantidad todavía no se
- * cargó o es 0, para no mostrar `NaN`/`Infinity` mientras el usuario tipea. */
-function computeAvgWeight(quantity: string, kilos: string): string {
+/** `valor / cantidad` — mismo cálculo para Ingreso (con los campos de
+ * Entrada) y Venta (con los de Salida), sea `valor` los kilos (modo "kilo")
+ * o el `total` (modo "dinero", ver `computeMovementDelta` del backend). `0`
+ * si la cantidad todavía no se cargó o es 0, para no mostrar
+ * `NaN`/`Infinity` mientras el usuario tipea. */
+function computeAverage(quantity: string, value: string): string {
   const parsedQuantity = Number(quantity);
-  const parsedKilos = Number(kilos);
-  if (!parsedQuantity || Number.isNaN(parsedKilos)) return '0';
-  return (parsedKilos / parsedQuantity).toFixed(2);
+  const parsedValue = Number(value);
+  if (!parsedQuantity || Number.isNaN(parsedValue)) return '0';
+  return (parsedValue / parsedQuantity).toFixed(2);
 }
 
 /** Igual estructura que el resto de los diálogos, agrupando Cantidad/Kilos
@@ -93,16 +102,30 @@ function computeAvgWeight(quantity: string, kilos: string): string {
  * /kardex-movement-types`, no 3 strings hardcodeados) decide qué más se
  * muestra: "Ingreso" pide Entrada (cantidad/kilos) + Total, sin
  * inversionista. "Venta" pide Salida (cantidad/kilos) + Total + un
- * inversionista puntual. "Baja" pide solo Salida — cantidad (sin kilos, sin
- * total, sin inversionista). El saldo (`balanceQuantity`/`balanceKilos`/
- * `total` de la inversión) ya no se tipea acá: lo calcula el backend y vive
- * en `Investment` (ver ese doc).
+ * inversionista puntual. "Baja" pide Salida — cantidad + Salida — kilos
+ * (mismo título/campo que Venta), sin inversionista. El saldo
+ * (`balanceQuantity`/`balanceKilos`/`total` de la inversión) ya no se tipea
+ * acá: lo calcula el backend y vive en `Investment` (ver ese doc).
  *
- * "Peso promedio" = kilos / cantidad en Ingreso y Venta (los dos únicos
- * tipos que piden cantidad Y kilos) — se calcula solo, no se tipea, y se
- * muestra debajo del par Cantidad/Kilos que lo determina (a pedido del
- * usuario). En Baja no hay kilos de los que derivarlo, así que ahí sigue
- * siendo un dato manual, debajo de "Salida — cantidad".
+ * `investmentTypeName` ('kilo'/'dinero', fijo por inversión) decide si
+ * "Entrada — kilos"/"Salida — kilos" se muestran o no: en modo "dinero" NO
+ * se piden — el único dato de esa fila pasa a ser `total` (que ya existía
+ * en el formulario para Debe/Haber, o el mismo campo `avgWeight` en Baja,
+ * relabeleado a "Total Bs."), y "Peso promedio" pasa a llamarse "Monto
+ * promedio" (mismo cálculo, `computeAverage`, pero con `total` en vez de
+ * kilos).
+ *
+ * "Peso/Monto promedio" en Ingreso/Venta = kilos-o-total / cantidad — se
+ * calcula solo, no se tipea, y se muestra debajo del par Cantidad/Kilos que
+ * lo determina. En **Baja** el mismo campo `avgWeight` se reusa distinto (a
+ * pedido del usuario, 2026-09-24): en vez de mostrarse como un promedio
+ * calculado, se tipea A MANO como "Salida — kilos" (modo kilo) o "Total
+ * Bs." (modo dinero) — mismo título/estilo (`FormattedNumberInput`) que
+ * usa Venta para su campo equivalente, porque acá el valor SÍ resta
+ * directo del saldo (`computeMovementDelta`), no es un promedio
+ * informativo. `total` de Baja se mantiene siempre en 0 (no se toca) para
+ * no ensuciar Debe/Haber — la pérdida se resta del `kilos`/`total` de
+ * `Investment`, no del `total` del propio `KardexEntry`.
  *
  * En edición, `entry` (la fila de la lista, a propósito liviana — ver
  * `KardexEntryListItem`) solo se usa para saber QUÉ id editar. Todos los
@@ -110,7 +133,16 @@ function computeAvgWeight(quantity: string, kilos: string): string {
  * — mismo criterio que `InvestmentDialog`/`UserDialog`: el diálogo de
  * edición no depende del listado, pide el detalle completo por id.
  */
-export function KardexEntryDialog({ open, mode, entry, investors, onClose, onSave }: KardexEntryDialogProps) {
+export function KardexEntryDialog({
+  open,
+  mode,
+  entry,
+  investors,
+  investmentTypeName,
+  onClose,
+  onSave,
+}: KardexEntryDialogProps) {
+  const isDinero = investmentTypeName === 'dinero';
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { data: movementTypesData } = useMovementTypes();
@@ -149,6 +181,7 @@ export function KardexEntryDialog({ open, mode, entry, investors, onClose, onSav
   const entryKilos = useWatch({ control, name: 'entryKilos' });
   const exitQuantity = useWatch({ control, name: 'exitQuantity' });
   const exitKilos = useWatch({ control, name: 'exitKilos' });
+  const total = useWatch({ control, name: 'total' });
   const avgWeight = useWatch({ control, name: 'avgWeight' });
 
   // Cambiar de tipo descarta el inversionista elegido — evita mandar un
@@ -159,16 +192,18 @@ export function KardexEntryDialog({ open, mode, entry, investors, onClose, onSav
     }
   }, [isVenta, setValue]);
 
-  // Peso promedio calculado — se recalcula en cada cambio de cantidad/kilos
-  // de Entrada (Ingreso) o Salida (Venta). En Baja no hay nada que calcular
-  // (no pide kilos), así que el campo sigue siendo el `register` normal.
+  // Promedio calculado — se recalcula en cada cambio de cantidad + el
+  // segundo valor que corresponda según el tipo de inversión: kilos (modo
+  // "kilo") o `total` (modo "dinero", que no pide kilos). En Baja no hay
+  // nada que calcular (no pide ninguno de los dos), así que el campo sigue
+  // siendo el `register` normal.
   useEffect(() => {
     if (isIngreso) {
-      setValue('avgWeight', computeAvgWeight(entryQuantity, entryKilos));
+      setValue('avgWeight', computeAverage(entryQuantity, isDinero ? total : entryKilos));
     } else if (isVenta) {
-      setValue('avgWeight', computeAvgWeight(exitQuantity, exitKilos));
+      setValue('avgWeight', computeAverage(exitQuantity, isDinero ? total : exitKilos));
     }
-  }, [isIngreso, isVenta, entryQuantity, entryKilos, exitQuantity, exitKilos, setValue]);
+  }, [isIngreso, isVenta, isDinero, entryQuantity, entryKilos, exitQuantity, exitKilos, total, setValue]);
 
   async function submit(data: KardexEntryFormData): Promise<void> {
     // Solo "venta" se atribuye a un inversionista puntual — ver
@@ -252,16 +287,38 @@ export function KardexEntryDialog({ open, mode, entry, investors, onClose, onSav
             )}
 
             {isIngreso && (
-              <div className="grid grid-cols-2 gap-4">
+              <div className={isDinero ? undefined : 'grid grid-cols-2 gap-4'}>
                 <Input label="Entrada — cantidad" type="number" disabled={loadingDetail} error={errors.entryQuantity?.message} {...register('entryQuantity')} />
+                {!isDinero && (
+                  <Controller
+                    control={control}
+                    name="entryKilos"
+                    render={({ field }) => (
+                      <FormattedNumberInput
+                        label="Entrada — kilos"
+                        disabled={loadingDetail}
+                        error={errors.entryKilos?.message}
+                        value={field.value}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                      />
+                    )}
+                  />
+                )}
+              </div>
+            )}
+
+            {isBaja && (
+              <div className="grid grid-cols-2 gap-4">
+                <Input label="Salida — cantidad" type="number" disabled={loadingDetail} error={errors.exitQuantity?.message} {...register('exitQuantity')} />
                 <Controller
                   control={control}
-                  name="entryKilos"
+                  name="avgWeight"
                   render={({ field }) => (
                     <FormattedNumberInput
-                      label="Entrada — kilos"
+                      label={isDinero ? 'Total Bs.' : 'Salida — kilos'}
                       disabled={loadingDetail}
-                      error={errors.entryKilos?.message}
+                      error={errors.avgWeight?.message}
                       value={field.value}
                       onChange={field.onChange}
                       onBlur={field.onBlur}
@@ -271,43 +328,37 @@ export function KardexEntryDialog({ open, mode, entry, investors, onClose, onSav
               </div>
             )}
 
-            {isBaja && (
-              <Input label="Salida — cantidad" type="number" disabled={loadingDetail} error={errors.exitQuantity?.message} {...register('exitQuantity')} />
-            )}
-
             {isVenta && (
-              <div className="grid grid-cols-2 gap-4">
+              <div className={isDinero ? undefined : 'grid grid-cols-2 gap-4'}>
                 <Input label="Salida — cantidad" type="number" disabled={loadingDetail} error={errors.exitQuantity?.message} {...register('exitQuantity')} />
-                <Controller
-                  control={control}
-                  name="exitKilos"
-                  render={({ field }) => (
-                    <FormattedNumberInput
-                      label="Salida — kilos"
-                      disabled={loadingDetail}
-                      error={errors.exitKilos?.message}
-                      value={field.value}
-                      onChange={field.onChange}
-                      onBlur={field.onBlur}
-                    />
-                  )}
-                />
+                {!isDinero && (
+                  <Controller
+                    control={control}
+                    name="exitKilos"
+                    render={({ field }) => (
+                      <FormattedNumberInput
+                        label="Salida — kilos"
+                        disabled={loadingDetail}
+                        error={errors.exitKilos?.message}
+                        value={field.value}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                      />
+                    )}
+                  />
+                )}
               </div>
             )}
 
             {(isIngreso || isVenta) && (
               <Input
-                label="Peso promedio (calculado)"
+                label={isDinero ? 'Monto promedio (calculado)' : 'Peso promedio (calculado)'}
                 type="number"
                 step="0.01"
                 value={avgWeight}
                 disabled
-                title="Kilos / cantidad — se calcula solo"
+                title={isDinero ? 'Total / cantidad — se calcula solo' : 'Kilos / cantidad — se calcula solo'}
               />
-            )}
-
-            {isBaja && (
-              <Input label="Peso promedio" type="number" step="0.01" disabled={loadingDetail} error={errors.avgWeight?.message} {...register('avgWeight')} />
             )}
 
             {(isIngreso || isVenta) && (

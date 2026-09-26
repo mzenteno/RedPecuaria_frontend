@@ -1,10 +1,12 @@
-import type { InvestmentRepository } from '@/domain/investment/investment.repository';
-import type { Investment, InvestmentListItem, CreateInvestmentData, UpdateInvestmentData } from '@/domain/investment/investment.entity';
 import type { PaginatedResult, PaginationParams } from '@/domain/common/paginated-result';
-import type { ListInvestmentsByGestionParams } from '@/domain/investment/list-investments-by-gestion.use-case';
-import type { ListInvestmentsByPropertyPaginatedParams } from '@/domain/investment/list-investments-by-property-paginated.use-case';
-import type { ListInvestmentsByInvestorParams } from '@/domain/investment/list-investments-by-investor.use-case';
-import { httpClient } from '../../http/http-client';
+import { httpClient } from '@/infrastructure/http/http-client';
+import type { Investment, InvestmentListItem, CreateInvestmentData, UpdateInvestmentData } from './investment.entity';
+import type {
+  InvestmentRepository,
+  ListInvestmentsByGestionParams,
+  ListInvestmentsByPropertyPaginatedParams,
+  ListInvestmentsByInvestorParams,
+} from './investment.repository';
 
 function toQueryString(params: Record<string, string | number | undefined>): string {
   const query = new URLSearchParams();

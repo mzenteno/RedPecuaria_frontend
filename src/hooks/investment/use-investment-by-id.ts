@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { getInvestmentByIdUseCase } from '@/infrastructure/di/investment.container';
+import { investmentRepository } from '@/features/investments/investment.container';
 
 /** Detalle completo de una inversión (`GET /investments/:id`) — para campos
  * que los listados no traen a propósito (ver `InvestmentListItem`), como el
@@ -10,7 +10,7 @@ import { getInvestmentByIdUseCase } from '@/infrastructure/di/investment.contain
 export function useInvestmentById(investmentId: string | null) {
   return useQuery({
     queryKey: ['investment', investmentId],
-    queryFn: () => getInvestmentByIdUseCase.execute(investmentId as string),
+    queryFn: () => investmentRepository.getById(investmentId as string),
     enabled: investmentId !== null,
   });
 }

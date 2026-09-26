@@ -4,11 +4,19 @@ export interface Investment {
   /** Resuelto con JOIN en el backend, no cruzado a mano contra el catálogo
    * de propiedades (bug real, ver `docs/investment/changes/...`). */
   propertyName: string;
+  /** Fijo desde la creación, nunca se edita (ver `UpdateInvestmentData`,
+   * que no lo tiene) — 'kilo' o 'dinero', decide si el Kardex de esta
+   * inversión pide/muestra kilos o dinero (ver `KardexEntryDialog`,
+   * `KardexTable`, `kardex-pdf.ts`). */
+  investmentTypeId: string;
+  investmentTypeName: string;
   gestion: number;
   description: string;
   /** Saldo vigente — ya no vive por fila en el kardex, se mantiene acá y se
    * actualiza en cada alta/edición/baja de un `KardexEntry` (ver
-   * docs/investment/investment.md del backend). */
+   * docs/investment/investment.md del backend). En inversiones "por
+   * dinero", `total` hace el papel de saldo físico (equivalente a
+   * `balanceKilos` en "por kilo") — nunca queda negativo. */
   balanceQuantity: number;
   balanceKilos: number;
   total: number;
@@ -35,6 +43,8 @@ export interface InvestmentListItem {
    * `propertyId` se mantiene porque el atajo "Ver kardex" sí lo necesita
    * crudo (ver `buildKardexShortcutQuery` en `investments/page.tsx`). */
   propertyName: string;
+  investmentTypeId: string;
+  investmentTypeName: string;
   gestion: number;
   description: string;
   isFinished: boolean;
@@ -44,6 +54,9 @@ export interface InvestmentListItem {
 
 export interface CreateInvestmentData {
   propertyId: string;
+  /** Fijo desde la creación — no existe en `UpdateInvestmentData`, no se
+   * puede cambiar después (ver docs/investment/investment.md). */
+  investmentTypeId: string;
   gestion: number;
   description: string;
   investorUserIds: string[];

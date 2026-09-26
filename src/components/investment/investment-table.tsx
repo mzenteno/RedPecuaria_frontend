@@ -1,5 +1,5 @@
 import { ClipboardList, Pencil, Trash2 } from 'lucide-react';
-import type { InvestmentListItem } from '@/domain/investment/investment.entity';
+import type { InvestmentListItem } from '@/features/investments/investment.entity';
 import type { UserOption } from '@/domain/user/user.entity';
 import { formatDate } from '@/lib/format-date';
 
@@ -43,6 +43,10 @@ export function InvestmentTable({
     return names.length > 0 ? names.join(', ') : '—';
   }
 
+  function capitalize(name: string): string {
+    return name.charAt(0).toUpperCase() + name.slice(1);
+  }
+
   return (
     <div className="data-table-wrapper">
       <table className="data-table" style={{ minWidth: '64rem' }}>
@@ -51,6 +55,7 @@ export function InvestmentTable({
             <th>Propiedad</th>
             <th>Gestión</th>
             <th>Descripción</th>
+            <th>Tipo</th>
             <th>Estado</th>
             <th>Inversionistas</th>
             <th>Creada el</th>
@@ -63,13 +68,12 @@ export function InvestmentTable({
               <td>{investment.propertyName}</td>
               <td>{investment.gestion}</td>
               <td>{investment.description}</td>
+              <td>{capitalize(investment.investmentTypeName)}</td>
               <td>
                 <span
                   className="tipo-label"
                   style={{
-                    padding: '0.125rem 0.5rem',
                     color: investment.isFinished ? 'var(--text-muted)' : 'var(--primary)',
-                    background: investment.isFinished ? 'var(--bg-input)' : 'var(--primary-light)',
                   }}
                 >
                   {investment.isFinished ? 'Terminada' : 'Activa'}
@@ -115,7 +119,7 @@ export function InvestmentTable({
           ))}
           {investments.length === 0 && (
             <tr>
-              <td colSpan={7} className="data-table-empty">
+              <td colSpan={8} className="data-table-empty">
                 No se encontraron inversiones
               </td>
             </tr>

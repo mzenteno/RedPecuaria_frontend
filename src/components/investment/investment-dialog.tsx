@@ -4,12 +4,14 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import type { InvestmentListItem } from '@/domain/investment/investment.entity';
+import type { InvestmentListItem } from '@/features/investments/investment.entity';
 import { useInvestorUsers } from '@/hooks/user/use-investor-users';
 import { usePropertyOptions } from '@/hooks/property/use-property-options';
 import { useInvestmentById } from '@/hooks/investment/use-investment-by-id';
+import { useInvestmentTypes } from '@/hooks/investment/use-investment-types';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
+import { MultiSelect } from '@/components/ui/multi-select';
 import { Button } from '@/components/ui/button';
 import { ApiError } from '@/infrastructure/http/http-client';
 
@@ -20,6 +22,10 @@ const GESTION_YEARS = Array.from({ length: 8 }, (_, i) => CURRENT_YEAR + 1 - i);
 
 const investmentSchema = z.object({
   propertyId: z.string().min(1, 'Selecciona una propiedad'),
+  // Solo se valida como obligatorio en el alta — en edición no se muestra
+  // un combo editable (ver más abajo), viaja precargado con el valor
+  // actual, que siempre existe.
+  investmentTypeId: z.string().min(1, 'Selecciona un tipo de inversión'),
   gestion: z.string().min(1, 'Selecciona una gestión'),
   description: z.string().min(1, 'La descripción es obligatoria'),
   // 'false'/'true' como string (mismo criterio que `gestion`) — solo se
@@ -28,6 +34,10 @@ const investmentSchema = z.object({
 });
 
 type InvestmentFormData = z.infer<typeof investmentSchema>;
+
+function capitalize(name: string): string {
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
 
 interface InvestmentDialogProps {
   open: boolean;
@@ -41,6 +51,10 @@ interface InvestmentDialogProps {
   onClose: () => void;
   onSave: (data: {
     propertyId: string;
+    /** Solo tiene efecto en el alta — el backend ignora este campo en
+     * `PATCH /investments/:id` (`UpdateInvestmentRequestDto` no lo
+     * declara, `whitelist: true` lo descarta). Fijo desde la creación. */
+    investmentTypeId: string;
     gestion: number;
     description: string;
     investorUserIds: string[];
@@ -84,6 +98,8 @@ export function InvestmentDialog({
   const [investorIds, setInvestorIds] = useState<string[]>([]);
   const { investors, isLoading: investorsLoading } = useInvestorUsers();
   const { properties, isLoading: propertiesLoading } = usePropertyOptions();
+  const { data: investmentTypesData } = useInvestmentTypes();
+  const investmentTypes = investmentTypesData ?? [];
   const { data: investmentDetail, isLoading: investmentDetailLoading } = useInvestmentById(
     mode === 'edit' ? (investment?.id ?? null) : null,
   );
@@ -112,6 +128,10 @@ export function InvestmentDialog({
     // que `EditUserForm`).
     values: {
       propertyId: mode === 'edit' ? (investmentDetail?.propertyId ?? '') : (defaultPropertyId ?? ''),
+      // En edición no hay combo editable (ver más abajo) — precargado con
+      // el valor actual para que la validación pase igual, aunque nunca
+      // cambie.
+      investmentTypeId: mode === 'edit' ? (investmentDetail?.investmentTypeId ?? '') : '',
       gestion: mode === 'edit' ? (investmentDetail ? String(investmentDetail.gestion) : '') : '',
       description: mode === 'edit' ? (investmentDetail?.description ?? '') : '',
       // Una inversión recién creada siempre arranca activa — el combo
@@ -119,10 +139,6 @@ export function InvestmentDialog({
       isFinished: mode === 'edit' && investmentDetail ? String(investmentDetail.isFinished) : 'false',
     },
   });
-
-  function toggleInvestor(userId: string): void {
-    setInvestorIds((prev) => (prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]));
-  }
 
   async function submit(data: InvestmentFormData): Promise<void> {
     if (investorIds.length === 0) {
@@ -134,6 +150,7 @@ export function InvestmentDialog({
     try {
       await onSave({
         propertyId: data.propertyId,
+        investmentTypeId: data.investmentTypeId,
         gestion: Number(data.gestion),
         description: data.description,
         investorUserIds: investorIds,
@@ -174,6 +191,31 @@ export function InvestmentDialog({
               ))}
             </Select>
 
+            {mode === 'create' ? (
+              <Select
+                label="Tipo de inversión"
+                error={errors.investmentTypeId?.message}
+                disabled={loadingDetail}
+                {...register('investmentTypeId')}
+              >
+                {investmentTypes.map((type) => (
+                  <option key={type.id} value={type.id}>
+                    {capitalize(type.name)}
+                  </option>
+                ))}
+              </Select>
+            ) : (
+              // Fijo desde la creación, no se puede editar — mismo criterio
+              // inverso a "Estado" (que solo se muestra en edición): acá se
+              // muestra pero sin combo editable, solo de referencia.
+              <Input
+                label="Tipo de inversión"
+                value={investmentDetail ? capitalize(investmentDetail.investmentTypeName) : ''}
+                disabled
+                title="Fijo desde la creación, no se puede cambiar"
+              />
+            )}
+
             <Select
               label="Gestión"
               error={errors.gestion?.message}
@@ -203,29 +245,16 @@ export function InvestmentDialog({
               </Select>
             )}
 
-            <div className="flex flex-col gap-1">
-              <label className="tipo-label">Inversionistas</label>
-              <div
-                className="flex max-h-40 flex-col gap-2 overflow-y-auto border p-3"
-                style={{ borderColor: 'var(--border-input)' }}
-              >
-                {investorsLoading && <span className="tipo-muted">Cargando...</span>}
-                {!investorsLoading && investors.length === 0 && (
-                  <span className="tipo-muted">No hay usuarios de tipo Inversionista todavía.</span>
-                )}
-                {investors.map((investor) => (
-                  <label key={investor.id} className="flex cursor-pointer items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={investorIds.includes(investor.id)}
-                      onChange={() => toggleInvestor(investor.id)}
-                      className="h-4 w-4 cursor-pointer accent-[var(--primary)]"
-                    />
-                    <span className="tipo-normal">{investor.fullName}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
+            <MultiSelect
+              label="Inversionistas"
+              options={investors.map((investor) => ({ id: investor.id, label: investor.fullName }))}
+              selectedIds={investorIds}
+              onChange={setInvestorIds}
+              loading={investorsLoading}
+              disabled={loadingDetail}
+              placeholder="Busca y selecciona inversionistas"
+              emptyMessage="No hay usuarios de tipo Inversionista todavía."
+            />
           </div>
 
           {error && <p className="tipo-error">{error}</p>}

@@ -7,7 +7,9 @@ import { useMyInvestments } from '@/hooks/investment/use-my-investments';
 import { useInvestmentById } from '@/hooks/investment/use-investment-by-id';
 import { useKardexEntries } from '@/hooks/kardex/use-kardex-entries';
 import { useInvestorUsers } from '@/hooks/user/use-investor-users';
+import { useCompanies } from '@/hooks/company/use-companies';
 import { usePermission } from '@/hooks/menu/use-permission';
+import { useActiveCompanyId } from '@/hooks/menu/use-active-company-id';
 import type { KardexEntryFields, KardexEntryListItem } from '@/domain/kardex/kardex-entry.entity';
 import { PageToolbar } from '@/components/ui/page-toolbar';
 import { Pagination } from '@/components/ui/pagination';
@@ -112,6 +114,13 @@ function KardexPageContent() {
   } = useMyInvestments(myInvestmentsPage, MY_INVESTMENTS_PAGE_SIZE, investmentId === null);
   const { canCreate, canEdit, canDelete } = usePermission(MENU_KEY);
   const { investors: allInvestors } = useInvestorUsers();
+  // Logo de la empresa activa, para el encabezado del PDF (ver
+  // `docs/company/changes/2026-09-26-logo-de-empresa.md`) — `useCompanies()`
+  // ya devuelve solo la empresa propia si quien mira no es Super
+  // Administrador, así que este `find` no expone logos de otras empresas.
+  const { companies } = useCompanies();
+  const activeCompanyId = useActiveCompanyId();
+  const companyLogoUrl = companies.find((c) => c.id === activeCompanyId)?.logoUrl ?? null;
   const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   const [searchInput, setSearchInput] = useState('');
@@ -189,12 +198,14 @@ function KardexPageContent() {
       // Ignora la paginación de pantalla — trae el historial activo
       // completo para que el PDF no salga cortado en 20 filas.
       const allEntries = await fetchAllKardexEntries(investmentId);
-      downloadKardexPdf({
+      await downloadKardexPdf({
         propertyName: investmentDetail.propertyName,
         investmentDescription: investmentDetail.description,
         gestion: investmentDetail.gestion,
+        investmentTypeName: investmentDetail.investmentTypeName,
         investors,
         entries: allEntries,
+        companyLogoUrl,
       });
     } catch (err) {
       setErrorMessage(err instanceof ApiError ? err.message : 'Error al generar el PDF');
@@ -292,7 +303,9 @@ function KardexPageContent() {
           {investmentDetail && (
             <p className="tipo-secundario">
               Saldo actual: {investmentDetail.balanceQuantity} cabezas ·{' '}
-              {formatNumber(investmentDetail.balanceKilos)} kg
+              {investmentDetail.investmentTypeName === 'dinero'
+                ? `${formatNumber(investmentDetail.total)} Bs.`
+                : `${formatNumber(investmentDetail.balanceKilos)} kg`}
             </p>
           )}
         </div>
@@ -313,6 +326,7 @@ function KardexPageContent() {
         />
         <KardexTable
           entries={entries}
+          investmentTypeName={investmentDetail?.investmentTypeName ?? 'kilo'}
           totalDebe={totalDebe}
           totalHaber={totalHaber}
           loading={isLoading}
@@ -336,6 +350,7 @@ function KardexPageContent() {
         mode={dialog.mode}
         entry={dialog.entry}
         investors={investors}
+        investmentTypeName={investmentDetail?.investmentTypeName ?? 'kilo'}
         onClose={closeDialog}
         onSave={handleSave}
       />

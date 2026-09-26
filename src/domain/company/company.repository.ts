@@ -6,4 +6,6 @@ export interface CompanyRepository {
   create(data: CreateCompanyData): Promise<Company>;
   update(id: string, data: UpdateCompanyData): Promise<Company>;
   deactivate(id: string): Promise<void>;
+  uploadLogo(id: string, file: File): Promise<Company>;
+  removeLogo(id: string): Promise<Company>;
 }

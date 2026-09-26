@@ -9,6 +9,7 @@ import { Eye, EyeOff } from 'lucide-react';
 import type { UserListItem, CreateUserData, UpdateUserData } from '@/domain/user/user.entity';
 import { useRoles } from '@/hooks/role/use-roles';
 import { useUserTypes } from '@/hooks/user-type/use-user-types';
+import { useIsSuperAdmin } from '@/hooks/menu/use-is-super-admin';
 import { useUserById } from '@/hooks/user/use-user-by-id';
 import { useUserRole } from '@/hooks/user-company/use-user-role';
 import { changeUserTypeUseCase } from '@/infrastructure/di/user.container';
@@ -17,6 +18,16 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { ApiError } from '@/infrastructure/http/http-client';
+
+// Mismo nombre de catálogo que usa el backend (`SUPER_ADMIN_USER_TYPE_NAME`)
+// — acá no hay ningún endpoint que ya venga filtrado por rol para el combo
+// (`GET /user-types` trae el catálogo completo), así que se saca la opción
+// del lado del cliente. Solo evita el intento inútil desde la UI — el
+// backend igual lo rechaza si se lo pidieran por fuera (Postman, etc.), ver
+// `RegisterUserUseCase`/`ChangeUserTypeUseCase` (a pedido del usuario,
+// 2026-09-25: solo un Super Administrador puede crear o ascender a otro
+// usuario a ese tipo).
+const SUPER_ADMIN_TYPE_NAME = 'Super Administrador';
 
 const createUserSchema = z.object({
   username: z.string().min(1, 'El usuario es obligatorio'),
@@ -95,6 +106,10 @@ function CreateUserForm({
   // por sesión, no por parámetro).
   const { roles } = useRoles();
   const { data: userTypes } = useUserTypes();
+  const isSuperAdmin = useIsSuperAdmin();
+  const selectableUserTypes = isSuperAdmin
+    ? userTypes
+    : userTypes?.filter((type) => type.name !== SUPER_ADMIN_TYPE_NAME);
   const {
     register,
     handleSubmit,
@@ -163,7 +178,7 @@ function CreateUserForm({
           defaultValue=""
           {...register('userTypeId')}
         >
-          {userTypes?.map((type) => (
+          {selectableUserTypes?.map((type) => (
             <option key={type.id} value={type.id}>
               {type.name}
             </option>
@@ -206,6 +221,10 @@ function EditUserForm({
   const [error, setError] = useState<string | null>(null);
   const { roles } = useRoles();
   const { data: userTypes } = useUserTypes();
+  const isSuperAdmin = useIsSuperAdmin();
+  const selectableUserTypes = isSuperAdmin
+    ? userTypes
+    : userTypes?.filter((type) => type.name !== SUPER_ADMIN_TYPE_NAME);
   // El listado (`UserListItem`) es liviano a propósito (solo lo que se
   // muestra en la tabla, ver `docs/user/changes/...`) — el formulario NUNCA
   // debe leer sus campos como si fueran el detalle completo. `user` (la fila
@@ -287,7 +306,7 @@ function EditUserForm({
           disabled={loadingDetail}
           {...register('userTypeId')}
         >
-          {userTypes?.map((type) => (
+          {selectableUserTypes?.map((type) => (
             <option key={type.id} value={type.id}>
               {type.name}
             </option>

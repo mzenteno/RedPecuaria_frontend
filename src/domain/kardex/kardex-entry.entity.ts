@@ -15,7 +15,7 @@ export interface KardexEntry {
   exitKilos: number;
   /** Dato que tipea el usuario en Ingreso/Venta (0 en Baja) — el saldo
    * acumulado vive en `Investment.balanceQuantity`/`balanceKilos`/`total`,
-   * no acá (ver `domain/investment/investment.entity.ts`). */
+   * no acá (ver `features/investments/investment.entity.ts`). */
   total: number;
   createdAt: string;
 }
@@ -51,6 +51,9 @@ export interface KardexEntryListItem {
   exitKilos: number;
   runningBalanceQuantity: number;
   runningBalanceKilos: number;
+  /** Equivalente a `runningBalanceKilos` en dinero — solo se muestra si la
+   * inversión es "por dinero" (ver `Investment.investmentTypeName`). */
+  runningBalanceTotal: number;
   /** Reformulación contable de `total`, ya resuelta en el backend según el
    * tipo de movimiento — Ingreso es "Debe" (dinero que entra), Venta/Baja
    * son "Haber" (dinero que sale/se recupera; Baja siempre da `0`, nunca
