@@ -2,6 +2,7 @@
 
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { investmentRepository } from '@/features/investments/investment.container';
+import type { MyInvestmentsStatus } from '@/features/investments/investment.repository';
 
 const MY_INVESTMENTS_KEY = 'investments-mine';
 
@@ -15,10 +16,10 @@ const MY_INVESTMENTS_KEY = 'investments-mine';
  * inversión — si se entró por el atajo "Ver kardex" (con `investmentId` ya
  * sabido), pedirla es un fetch desperdiciado (bug real, ver el change de
  * este cambio). */
-export function useMyInvestments(page: number, pageSize: number, enabled = true) {
+export function useMyInvestments(page: number, pageSize: number, status: MyInvestmentsStatus, enabled = true) {
   const { data, isLoading } = useQuery({
-    queryKey: [MY_INVESTMENTS_KEY, page, pageSize],
-    queryFn: () => investmentRepository.listMine({ page, pageSize }),
+    queryKey: [MY_INVESTMENTS_KEY, status, page, pageSize],
+    queryFn: () => investmentRepository.listMine({ page, pageSize, status }),
     placeholderData: keepPreviousData,
     enabled,
   });

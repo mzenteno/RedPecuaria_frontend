@@ -12,7 +12,11 @@ export interface KardexPdfParams {
    * columnas de Entrada/Salida/Saldo (y "Peso prom.") muestran kilos o
    * dinero, mismo criterio que `KardexTable`. */
   investmentTypeName: string;
-  investors: { id: string; fullName: string }[];
+  /** El Kardex ahora siempre es de UN inversionista puntual (a pedido del
+   * usuario, 2026-10-14) — ya no tiene sentido una columna "Inversionista"
+   * por fila (sería el mismo nombre en todas), así que se muestra una sola
+   * vez en el encabezado. */
+  investorName: string;
   entries: KardexEntryListItem[];
   /** `Company.logoUrl` de la empresa activa — hoy un `data:` URI en base64
    * (ver `docs/company/changes/2026-09-26-logo-en-base64-no-en-disco.md`),
@@ -96,7 +100,7 @@ async function loadCompanyLogo(
  * que resolverse antes de `doc.save()`.
  */
 export async function downloadKardexPdf(params: KardexPdfParams): Promise<void> {
-  const { propertyName, investmentDescription, gestion, investmentTypeName, investors, entries, companyLogoUrl } =
+  const { propertyName, investmentDescription, gestion, investmentTypeName, investorName, entries, companyLogoUrl } =
     params;
   const isDinero = investmentTypeName === 'dinero';
 
@@ -130,8 +134,8 @@ export async function downloadKardexPdf(params: KardexPdfParams): Promise<void> 
   const infoLines = [
     `Descripción: ${investmentDescription}`,
     `Gestión: ${gestion}`,
-    investors.length > 0 ? `Inversionistas: ${investors.map((investor) => investor.fullName).join(', ')}` : null,
-  ].filter((line): line is string => line !== null);
+    `Inversionista: ${investorName}`,
+  ];
 
   for (const line of infoLines) {
     doc.text(line, 40, infoY);
@@ -142,7 +146,6 @@ export async function downloadKardexPdf(params: KardexPdfParams): Promise<void> 
     [
       { content: 'Fecha', rowSpan: 2 },
       { content: 'Detalle', rowSpan: 2 },
-      { content: 'Inversionista', rowSpan: 2 },
       { content: isDinero ? 'Monto\nprom.' : 'Peso\nprom.', rowSpan: 2 },
       { content: 'Entrada', colSpan: 2 },
       { content: 'Salida', colSpan: 2 },
@@ -162,7 +165,6 @@ export async function downloadKardexPdf(params: KardexPdfParams): Promise<void> 
     return [
       formatDateOnly(entry.entryDate),
       entry.detail,
-      entry.investorName ?? '',
       isBaja ? '' : formatNumber(entry.avgWeight),
       isIngreso ? String(entry.entryQuantity) : '',
       isIngreso ? formatNumber(isDinero ? entry.debe : entry.entryKilos) : '',
@@ -186,7 +188,6 @@ export async function downloadKardexPdf(params: KardexPdfParams): Promise<void> 
     columnStyles: {
       0: { cellWidth: 55 },
       1: { halign: 'left', cellWidth: 140 },
-      2: { halign: 'left', cellWidth: 90 },
     },
   });
 

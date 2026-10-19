@@ -6,39 +6,70 @@ import {
   createKardexEntryUseCase,
   updateKardexEntryUseCase,
   deactivateKardexEntryUseCase,
+  setKardexInvestorFinishedUseCase,
 } from '@/infrastructure/di/kardex.container';
 import type { CreateKardexEntryData, UpdateKardexEntryData } from '@/domain/kardex/kardex-entry.entity';
 
-function kardexKey(investmentId: string) {
-  return ['kardex-entries', investmentId];
+function kardexKey(investmentId: string, investorUserId: string) {
+  return ['kardex-entries', investmentId, investorUserId];
 }
 
-/** El kardex es siempre de una inversión puntual — sin `investmentId`
- * (todavía no se eligió Propiedad + Inversión en los combobox de la
- * pantalla) la query queda deshabilitada. Paginado en el servidor (ver
+/** El kardex es siempre de una inversión Y un inversionista puntuales (a
+ * pedido del usuario, 2026-10-14) — sin ambos (todavía no se eligió
+ * Propiedad + Inversión, o no se eligió inversionista en la pantalla
+ * intermedia) la query queda deshabilitada. Paginado en el servidor (ver
  * ARCHITECTURE.md §8/§9). */
-export function useKardexEntries(investmentId: string | null, page: number, pageSize: number, search: string) {
+export function useKardexEntries(
+  investmentId: string | null,
+  investorUserId: string | null,
+  page: number,
+  pageSize: number,
+  search: string,
+) {
   const queryClient = useQueryClient();
-  const queryKey = [...kardexKey(investmentId ?? 'none'), page, pageSize, search];
+  const queryKey = [...kardexKey(investmentId ?? 'none', investorUserId ?? 'none'), page, pageSize, search];
 
   const { data, isLoading } = useQuery({
     queryKey,
     queryFn: () =>
       listKardexEntriesByInvestmentUseCase.execute({
         investmentId: investmentId as string,
+        investorUserId: investorUserId as string,
         page,
         pageSize,
         search: search || undefined,
       }),
-    enabled: investmentId !== null,
+    enabled: investmentId !== null && investorUserId !== null,
     placeholderData: keepPreviousData,
   });
 
   const invalidate = () => {
-    if (investmentId) {
-      queryClient.invalidateQueries({ queryKey: kardexKey(investmentId) });
+    if (investmentId && investorUserId) {
+      queryClient.invalidateQueries({ queryKey: kardexKey(investmentId, investorUserId) });
     }
   };
+
+  const { mutateAsync: setInvestorFinishedMutation } = useMutation({
+    mutationFn: (isFinished: boolean) =>
+      setKardexInvestorFinishedUseCase.execute({
+        investmentId: investmentId as string,
+        investorUserId: investorUserId as string,
+        isFinished,
+      }),
+    onSuccess: () => {
+      invalidate();
+      // Cambia también las pestañas de "Mis inversiones" y el estado
+      // derivado de la inversión (columna "Estado" en Inversiones) — todos
+      // los listados de inversiones usan claves `investments-*`, más el
+      // detalle `['investment', id]`.
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const key = query.queryKey[0];
+          return typeof key === 'string' && (key === 'investment' || key.startsWith('investments-'));
+        },
+      });
+    },
+  });
 
   const { mutateAsync: createEntry } = useMutation({
     mutationFn: (data: CreateKardexEntryData) => createKardexEntryUseCase.execute(data),
@@ -64,9 +95,16 @@ export function useKardexEntries(investmentId: string | null, page: number, page
     // footer de la tabla, ver `KardexTable`.
     totalDebe: data?.totalDebe ?? 0,
     totalHaber: data?.totalHaber ?? 0,
+    // Saldo VIGENTE del inversionista — "Saldo actual" en `page.tsx`, ya no
+    // sale de `Investment.balance*` (agregado de todos los inversionistas).
+    investorBalanceQuantity: data?.investorBalanceQuantity ?? 0,
+    investorBalanceKilos: data?.investorBalanceKilos ?? 0,
+    investorTotal: data?.investorTotal ?? 0,
+    investorIsFinished: data?.investorIsFinished ?? false,
     isLoading,
     createEntry,
     updateEntry: (id: string, data: UpdateKardexEntryData) => updateEntryMutation({ id, data }),
     deactivateEntry,
+    setInvestorFinished: setInvestorFinishedMutation,
   };
 }

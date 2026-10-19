@@ -223,6 +223,27 @@ body {
     background: var(--primary-hover);
   }
 
+  /* Pestañas (`components/ui/tabs.tsx`) — subrayado verde en la activa,
+     mismo acento que el ítem activo del sidebar. */
+  .tabs {
+    @apply flex gap-1 px-5 border-b;
+    border-color: var(--border-subtle);
+  }
+  .tab {
+    @apply px-3 py-3 text-sm font-medium border-b-2 border-transparent -mb-px cursor-pointer transition-colors;
+    color: var(--text-muted);
+  }
+  .tab:hover {
+    color: var(--foreground);
+  }
+  .tab-active {
+    color: var(--primary);
+    border-bottom-color: var(--primary);
+  }
+  .tab-active:hover {
+    color: var(--primary);
+  }
+
   /* Formularios / diálogos */
   .form-input {
     @apply w-full border px-4 py-2.5 text-sm outline-none transition-all;

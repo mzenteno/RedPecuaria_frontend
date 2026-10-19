@@ -3,6 +3,7 @@ import { UpdateKardexEntryUseCaseImpl } from '@/application/kardex/update-kardex
 import { DeactivateKardexEntryUseCaseImpl } from '@/application/kardex/deactivate-kardex-entry.use-case.impl';
 import { ListKardexEntriesByInvestmentUseCaseImpl } from '@/application/kardex/list-kardex-entries-by-investment.use-case.impl';
 import { GetKardexEntryByIdUseCaseImpl } from '@/application/kardex/get-kardex-entry-by-id.use-case.impl';
+import { SetKardexInvestorFinishedUseCaseImpl } from '@/application/kardex/set-kardex-investor-finished.use-case.impl';
 import { KardexEntryRepositoryImpl } from '../repositories/kardex/kardex-entry.repository.impl';
 
 export const kardexEntryRepository = new KardexEntryRepositoryImpl();
@@ -13,3 +14,4 @@ export const listKardexEntriesByInvestmentUseCase = new ListKardexEntriesByInves
   kardexEntryRepository,
 );
 export const getKardexEntryByIdUseCase = new GetKardexEntryByIdUseCaseImpl(kardexEntryRepository);
+export const setKardexInvestorFinishedUseCase = new SetKardexInvestorFinishedUseCaseImpl(kardexEntryRepository);

@@ -1,4 +1,4 @@
-import type { PaginatedResult, PaginationParams } from '@/domain/common/paginated-result';
+import type { PaginatedResult } from '@/domain/common/paginated-result';
 import { httpClient } from '@/infrastructure/http/http-client';
 import type { Investment, InvestmentListItem, CreateInvestmentData, UpdateInvestmentData } from './investment.entity';
 import type {
@@ -6,6 +6,7 @@ import type {
   ListInvestmentsByGestionParams,
   ListInvestmentsByPropertyPaginatedParams,
   ListInvestmentsByInvestorParams,
+  ListMyInvestmentsParams,
 } from './investment.repository';
 
 function toQueryString(params: Record<string, string | number | undefined>): string {
@@ -19,8 +20,8 @@ function toQueryString(params: Record<string, string | number | undefined>): str
 }
 
 export class InvestmentRepositoryImpl implements InvestmentRepository {
-  async listMine(params: PaginationParams): Promise<PaginatedResult<InvestmentListItem>> {
-    const query = toQueryString({ page: params.page, pageSize: params.pageSize });
+  async listMine(params: ListMyInvestmentsParams): Promise<PaginatedResult<InvestmentListItem>> {
+    const query = toQueryString({ page: params.page, pageSize: params.pageSize, status: params.status });
     const result = await httpClient.getPaginated<InvestmentListItem>(`/investments/mine?${query}`);
     return { items: result.items, total: result.total, page: result.page, pageSize: result.pageSize };
   }

@@ -2,6 +2,7 @@ import { Pencil, Trash2 } from 'lucide-react';
 import type { KardexEntryListItem } from '@/domain/kardex/kardex-entry.entity';
 import { formatDateOnly } from '@/lib/format-date';
 import { formatNumber } from '@/lib/format-number';
+import { capitalize } from '@/lib/capitalize';
 
 interface KardexTableProps {
   entries: KardexEntryListItem[];
@@ -21,9 +22,6 @@ interface KardexTableProps {
   onDeactivate: (entry: KardexEntryListItem) => void;
 }
 
-function capitalize(name: string): string {
-  return name.charAt(0).toUpperCase() + name.slice(1);
-}
 
 /** "Saldo cant."/"Saldo kilos" son el histórico fila por fila
  * (`runningBalanceQuantity`/`runningBalanceKilos`) — el backend los calcula
@@ -103,7 +101,7 @@ export function KardexTable({
 
   const isDinero = investmentTypeName === 'dinero';
   const showActions = canEdit || canDelete;
-  const columnCount = showActions ? 14 : 13;
+  const columnCount = showActions ? 13 : 12;
 
   return (
     <div className="data-table-wrapper">
@@ -117,7 +115,6 @@ export function KardexTable({
             <th rowSpan={2}>Fecha</th>
             <th rowSpan={2}>Detalle</th>
             <th rowSpan={2}>Tipo</th>
-            <th rowSpan={2}>Inversionista</th>
             <th rowSpan={2} className="text-right">{isDinero ? 'Monto prom.' : 'Peso prom.'}</th>
             <th colSpan={2} className="text-center">Entrada</th>
             <th colSpan={2} className="text-center">Salida</th>
@@ -145,7 +142,6 @@ export function KardexTable({
               <td>{formatDateOnly(entry.entryDate)}</td>
               <td>{entry.detail}</td>
               <td>{capitalize(entry.movementTypeName)}</td>
-              <td>{entry.investorName ?? '—'}</td>
               <td className="text-right">{isBaja ? '' : formatNumber(entry.avgWeight)}</td>
               <td className="text-right">{isIngreso ? entry.entryQuantity : ''}</td>
               <td className="text-right">
@@ -205,7 +201,6 @@ export function KardexTable({
         <tfoot>
           <tr>
             <td className="font-semibold">TOTAL</td>
-            <td></td>
             <td></td>
             <td></td>
             <td></td>

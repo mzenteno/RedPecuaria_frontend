@@ -19,6 +19,13 @@ export interface ListInvestmentsByPropertyPaginatedParams {
   search?: string;
 }
 
+export type MyInvestmentsStatus = 'active' | 'finished';
+
+export interface ListMyInvestmentsParams extends PaginationParams {
+  /** Pestañas "Activas"/"Terminadas" de "Mis inversiones" (Kardex). */
+  status: MyInvestmentsStatus;
+}
+
 export interface ListInvestmentsByInvestorParams {
   investorUserId: string;
   page: number;
@@ -61,7 +68,7 @@ export interface InvestmentRepository {
   /** "Mis inversiones" — las del usuario logueado como inversionista, sin
    * importar de qué propiedad sean. `userId` nunca se manda: sale de la
    * sesión en el backend (`@CurrentUser('sub')`). Paginado. */
-  listMine(params: PaginationParams): Promise<PaginatedResult<InvestmentListItem>>;
+  listMine(params: ListMyInvestmentsParams): Promise<PaginatedResult<InvestmentListItem>>;
   /** `GET /investments/:id` — detalle completo (con saldo), para quien
    * necesite más que lo que traen los listados (a propósito livianos, ver
    * `InvestmentListItem`): el diálogo de edición y "Saldo actual" en

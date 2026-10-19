@@ -2,6 +2,7 @@ import { ClipboardList, Pencil, Trash2 } from 'lucide-react';
 import type { InvestmentListItem } from '@/features/investments/investment.entity';
 import type { UserOption } from '@/domain/user/user.entity';
 import { formatDate } from '@/lib/format-date';
+import { capitalize } from '@/lib/capitalize';
 
 interface InvestmentTableProps {
   investments: InvestmentListItem[];
@@ -43,9 +44,6 @@ export function InvestmentTable({
     return names.length > 0 ? names.join(', ') : '—';
   }
 
-  function capitalize(name: string): string {
-    return name.charAt(0).toUpperCase() + name.slice(1);
-  }
 
   return (
     <div className="data-table-wrapper">

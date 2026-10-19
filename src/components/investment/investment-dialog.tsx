@@ -14,6 +14,7 @@ import { Select } from '@/components/ui/select';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { Button } from '@/components/ui/button';
 import { ApiError } from '@/infrastructure/http/http-client';
+import { capitalize } from '@/lib/capitalize';
 
 const CURRENT_YEAR = new Date().getFullYear();
 // Del año que viene hasta 6 para atrás — cubre gestiones recientes sin
@@ -28,16 +29,10 @@ const investmentSchema = z.object({
   investmentTypeId: z.string().min(1, 'Selecciona un tipo de inversión'),
   gestion: z.string().min(1, 'Selecciona una gestión'),
   description: z.string().min(1, 'La descripción es obligatoria'),
-  // 'false'/'true' como string (mismo criterio que `gestion`) — solo se
-  // muestra/edita en modo edición, ver el combo "Estado" más abajo.
-  isFinished: z.string(),
 });
 
 type InvestmentFormData = z.infer<typeof investmentSchema>;
 
-function capitalize(name: string): string {
-  return name.charAt(0).toUpperCase() + name.slice(1);
-}
 
 interface InvestmentDialogProps {
   open: boolean;
@@ -58,7 +53,6 @@ interface InvestmentDialogProps {
     gestion: number;
     description: string;
     investorUserIds: string[];
-    isFinished: boolean;
   }) => Promise<void>;
 }
 
@@ -73,11 +67,9 @@ interface InvestmentDialogProps {
  * misma empresa (`UpdateInvestmentUseCase` valida que la nueva propiedad
  * sea de la empresa activa).
  *
- * "Estado" (Activa/Terminada) solo se muestra en edición — una inversión
- * recién creada siempre arranca activa, no tiene sentido elegirlo al
- * alta. Es una elección manual del usuario, no se deriva del saldo: la
- * idea de uso es marcarla como Terminada cuando `balanceQuantity` llegue a
- * 0, pero nada lo fuerza (ver docs/investment/investment.md del backend).
+ * Sin combo "Estado" (Activa/Terminada) desde 2026-10-19: se finaliza por
+ * inversionista desde su Kardex, y el estado de la inversión completa se
+ * deriva en el backend (terminada = todos sus inversionistas terminados).
  *
  * En edición, `investment` (la fila de la lista, a propósito liviana —
  * ver `InvestmentListItem`) solo se usa para saber QUÉ id editar. Todos
@@ -134,9 +126,6 @@ export function InvestmentDialog({
       investmentTypeId: mode === 'edit' ? (investmentDetail?.investmentTypeId ?? '') : '',
       gestion: mode === 'edit' ? (investmentDetail ? String(investmentDetail.gestion) : '') : '',
       description: mode === 'edit' ? (investmentDetail?.description ?? '') : '',
-      // Una inversión recién creada siempre arranca activa — el combo
-      // "Estado" ni se muestra en modo alta.
-      isFinished: mode === 'edit' && investmentDetail ? String(investmentDetail.isFinished) : 'false',
     },
   });
 
@@ -154,7 +143,6 @@ export function InvestmentDialog({
         gestion: Number(data.gestion),
         description: data.description,
         investorUserIds: investorIds,
-        isFinished: data.isFinished === 'true',
       });
       onClose();
     } catch (err) {
@@ -237,13 +225,6 @@ export function InvestmentDialog({
               error={errors.description?.message}
               {...register('description')}
             />
-
-            {mode === 'edit' && (
-              <Select label="Estado" error={errors.isFinished?.message} disabled={loadingDetail} {...register('isFinished')}>
-                <option value="false">Activa</option>
-                <option value="true">Terminada</option>
-              </Select>
-            )}
 
             <MultiSelect
               label="Inversionistas"

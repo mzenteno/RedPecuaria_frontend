@@ -1,5 +1,6 @@
 import type { KardexEntryRepository, KardexEntriesPage } from '@/domain/kardex/kardex-entry.repository';
 import type { ListKardexEntriesParams } from '@/domain/kardex/list-kardex-entries-by-investment.use-case';
+import type { SetKardexInvestorFinishedData } from '@/domain/kardex/set-kardex-investor-finished.use-case';
 import type {
   KardexEntry,
   KardexEntryListItem,
@@ -12,15 +13,24 @@ export class KardexEntryRepositoryImpl implements KardexEntryRepository {
   async listByInvestment(params: ListKardexEntriesParams): Promise<KardexEntriesPage> {
     const query = new URLSearchParams({
       investmentId: params.investmentId,
+      investorUserId: params.investorUserId,
       page: String(params.page),
       pageSize: String(params.pageSize),
     });
     if (params.search) {
       query.set('search', params.search);
     }
-    const result = await httpClient.getPaginated<KardexEntryListItem, { totalDebe: number; totalHaber: number }>(
-      `/kardex-entries?${query.toString()}`,
-    );
+    const result = await httpClient.getPaginated<
+      KardexEntryListItem,
+      {
+        totalDebe: number;
+        totalHaber: number;
+        investorBalanceQuantity: number;
+        investorBalanceKilos: number;
+        investorTotal: number;
+        investorIsFinished: boolean;
+      }
+    >(`/kardex-entries?${query.toString()}`);
     return {
       items: result.items,
       total: result.total,
@@ -28,6 +38,10 @@ export class KardexEntryRepositoryImpl implements KardexEntryRepository {
       pageSize: result.pageSize,
       totalDebe: result.totalDebe,
       totalHaber: result.totalHaber,
+      investorBalanceQuantity: result.investorBalanceQuantity,
+      investorBalanceKilos: result.investorBalanceKilos,
+      investorTotal: result.investorTotal,
+      investorIsFinished: result.investorIsFinished,
     };
   }
 
@@ -45,5 +59,9 @@ export class KardexEntryRepositoryImpl implements KardexEntryRepository {
 
   async deactivate(id: string): Promise<void> {
     await httpClient.patch<void>(`/kardex-entries/${id}/deactivate`);
+  }
+
+  async setInvestorFinished(data: SetKardexInvestorFinishedData): Promise<void> {
+    await httpClient.patch<void>('/kardex-entries/investor-status', data);
   }
 }

@@ -21,6 +21,7 @@ import { Pagination } from '@/components/ui/pagination';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { InvestmentTable } from '@/components/investment/investment-table';
 import { InvestmentDialog } from '@/components/investment/investment-dialog';
+import { InvestorSelectDialog } from '@/components/kardex/investor-select-dialog';
 import { RequirePermission } from '@/components/auth/require-permission';
 import { ApiError } from '@/infrastructure/http/http-client';
 
@@ -79,6 +80,11 @@ function InvestmentsPageContent() {
   });
   const [pendingDeactivate, setPendingDeactivate] = useState<InvestmentListItem | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // "Ver kardex" ya no navega directo — primero hay que elegir de qué
+  // inversionista (a pedido del usuario, 2026-10-14: el Kardex siempre es de
+  // UN inversionista puntual), acá mismo con un diálogo, no en una pantalla
+  // intermedia de `/kardex` (ver `InvestorSelectDialog`/`openKardexForInvestor`).
+  const [kardexInvestment, setKardexInvestment] = useState<InvestmentListItem | null>(null);
 
   // Búsqueda de servidor: como el listado pagina de verdad, un filtro que
   // solo mirara la página ya descargada sería engañoso — el debounce evita
@@ -168,6 +174,10 @@ function InvestmentsPageContent() {
   const { investments, total, totalPages, isLoading, createInvestment, updateInvestment, deactivateInvestment } =
     activeMode === 'investor' ? byInvestor : activeMode === 'property' ? byProperty : byGestion;
   const { investors } = useInvestorUsers();
+  // Solo los inversionistas de la inversión que se está por abrir en el
+  // Kardex (`kardexInvestment`), no todos los de la empresa — para el
+  // diálogo de elegir inversionista.
+  const kardexInvestors = investors.filter((investor) => kardexInvestment?.investorIds.includes(investor.id));
 
   /** `investmentId` es para que `kardex/page.tsx` pida `GET
    * /investments/:id` y resuelva de una toda la inversión puntual (antes
@@ -179,7 +189,12 @@ function InvestmentsPageContent() {
    * tal cual, sin inventar un filtro de Propiedad a partir de la inversión
    * que se abrió (bug real: antes pasaba `investment.propertyId` como si
    * fuera el filtro de Propiedad de la pantalla, aunque no hubiera ninguno
-   * elegido). */
+   * elegido).
+   *
+   * OJO: `investorUserId` acá es el filtro "Inversionista" de ESTA
+   * pantalla, nada que ver con el inversionista del Kardex que se eligió en
+   * `InvestorSelectDialog` — por eso ese va con otro nombre (`investorId`,
+   * ver `openKardexForInvestor`), para no pisarse. */
   function buildKardexShortcutQuery(investment: InvestmentListItem): string {
     const params = new URLSearchParams();
     params.set('investmentId', investment.id);
@@ -189,6 +204,12 @@ function InvestmentsPageContent() {
     if (search) params.set('search', search);
     if (page > 1) params.set('page', String(page));
     return params.toString();
+  }
+
+  function openKardexForInvestor(investorId: string): void {
+    if (!kardexInvestment) return;
+    const query = buildKardexShortcutQuery(kardexInvestment);
+    router.push(`/kardex?${query}&investorId=${investorId}`);
   }
 
   function openCreate(): void {
@@ -209,12 +230,8 @@ function InvestmentsPageContent() {
     gestion: number;
     description: string;
     investorUserIds: string[];
-    isFinished: boolean;
   }): Promise<void> {
     if (dialog.mode === 'create') {
-      // Una inversión recién creada siempre arranca activa — `isFinished`
-      // ni siquiera existe en `CreateInvestmentData` (el diálogo lo manda
-      // igual porque comparte el mismo formulario, pero acá se descarta).
       const { propertyId, investmentTypeId, gestion, description, investorUserIds } = data;
       await createInvestment({ propertyId, investmentTypeId, gestion, description, investorUserIds });
     } else if (dialog.investment) {
@@ -311,7 +328,7 @@ function InvestmentsPageContent() {
               canViewKardex={canViewKardex}
               onEdit={openEdit}
               onDeactivate={setPendingDeactivate}
-              onViewKardex={(investment) => router.push(`/kardex?${buildKardexShortcutQuery(investment)}`)}
+              onViewKardex={setKardexInvestment}
             />
             <Pagination page={page} pageSize={PAGE_SIZE} total={total} totalPages={totalPages} onPageChange={setPage} />
           </>
@@ -348,6 +365,14 @@ function InvestmentsPageContent() {
         confirmLabel="Entendido"
         onConfirm={() => setErrorMessage(null)}
       />
+
+      {kardexInvestment && (
+        <InvestorSelectDialog
+          investors={kardexInvestors}
+          onSelect={openKardexForInvestor}
+          onCancel={() => setKardexInvestment(null)}
+        />
+      )}
     </div>
   );
 }

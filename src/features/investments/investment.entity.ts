@@ -20,9 +20,9 @@ export interface Investment {
   balanceQuantity: number;
   balanceKilos: number;
   total: number;
-  /** Estado de negocio (activa/terminada), elegido a mano por el usuario —
-   * distinto de `isDeleted` (baja administrativa). La idea es marcarla
-   * como terminada cuando el saldo llegue a 0, pero no se fuerza. */
+  /** Estado de negocio (activa/terminada), DERIVADO en el backend:
+   * terminada = todos sus inversionistas terminados (cada uno se finaliza
+   * desde su Kardex). Ya no se edita en el diálogo de Inversión. */
   isFinished: boolean;
   createdAt: string;
   investorIds: string[];
@@ -67,5 +67,4 @@ export interface UpdateInvestmentData {
   gestion: number;
   description: string;
   investorUserIds: string[];
-  isFinished: boolean;
 }

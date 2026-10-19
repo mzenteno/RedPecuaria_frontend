@@ -5,7 +5,6 @@ import { Controller, useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import type { KardexEntry, KardexEntryFields, KardexEntryListItem } from '@/domain/kardex/kardex-entry.entity';
-import type { UserOption } from '@/domain/user/user.entity';
 import { useMovementTypes } from '@/hooks/movement-type/use-movement-types';
 import { useKardexEntryById } from '@/hooks/kardex/use-kardex-entry-by-id';
 import { Input } from '@/components/ui/input';
@@ -13,6 +12,7 @@ import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { FormattedNumberInput } from '@/components/ui/formatted-number-input';
 import { ApiError } from '@/infrastructure/http/http-client';
+import { capitalize } from '@/lib/capitalize';
 
 const numberField = (label: string) =>
   z
@@ -20,17 +20,10 @@ const numberField = (label: string) =>
     .min(1, `${label} es obligatorio`)
     .refine((value) => !Number.isNaN(Number(value)), `${label} tiene que ser un número`);
 
-// A diferencia de la versión anterior, acá no se puede validar "venta
-// necesita inversionista" con un `.superRefine` — el schema solo ve
-// `movementTypeId` (un id sin significado propio, ver el catálogo real en
-// `GET /kardex-movement-types`), no el nombre resuelto ("ingreso"/"venta"/
-// "baja"). Esa validación se hace en `submit()`, que ya tiene `isVenta`
-// resuelto contra la lista cargada.
 const kardexEntrySchema = z.object({
   entryDate: z.string().min(1, 'La fecha es obligatoria'),
   detail: z.string().min(1, 'El detalle es obligatorio'),
   movementTypeId: z.string().min(1, 'Selecciona un tipo de movimiento'),
-  investorUserId: z.string().optional(),
   avgWeight: numberField('Este valor'),
   entryQuantity: numberField('La cantidad de entrada'),
   entryKilos: numberField('Los kilos de entrada'),
@@ -45,9 +38,11 @@ interface KardexEntryDialogProps {
   open: boolean;
   mode: 'create' | 'edit';
   entry: KardexEntryListItem | null;
-  /** Inversionistas de la inversión activa (ya resueltos a nombre) — para
-   * el combo que solo se muestra cuando el tipo de movimiento es "venta". */
-  investors: UserOption[];
+  /** El inversionista cuyo Kardex se está viendo (elegido en la pantalla
+   * anterior, ver `(main)/kardex/page.tsx`) — TODO movimiento nuevo queda
+   * atado a él, ya no se elige por tipo de movimiento (a pedido del
+   * usuario, 2026-10-14: antes solo "venta" pedía inversionista). */
+  investorUserId: string;
   /** 'kilo' o 'dinero' (`Investment.investmentTypeName`) — decide si este
    * diálogo pide kilos (modo original) o no pide nada de kilos y usa
    * `total` como el dato físico de Entrada/Salida (ver
@@ -68,7 +63,6 @@ function toFormValues(entry: KardexEntry | null): KardexEntryFormData {
     entryDate: entry?.entryDate ?? '',
     detail: entry?.detail ?? '',
     movementTypeId: entry?.movementTypeId ?? '',
-    investorUserId: entry?.investorUserId ?? '',
     avgWeight: entry ? entry.avgWeight.toFixed(2) : '0.00',
     entryQuantity: entry ? String(entry.entryQuantity) : '0',
     entryKilos: entry ? entry.entryKilos.toFixed(2) : '0.00',
@@ -78,9 +72,6 @@ function toFormValues(entry: KardexEntry | null): KardexEntryFormData {
   };
 }
 
-function capitalize(name: string): string {
-  return name.charAt(0).toUpperCase() + name.slice(1);
-}
 
 /** `valor / cantidad` — mismo cálculo para Ingreso (con los campos de
  * Entrada) y Venta (con los de Salida), sea `valor` los kilos (modo "kilo")
@@ -100,12 +91,15 @@ function computeAverage(quantity: string, value: string): string {
  *
  * El "Tipo de movimiento" (ahora un catálogo real, `GET
  * /kardex-movement-types`, no 3 strings hardcodeados) decide qué más se
- * muestra: "Ingreso" pide Entrada (cantidad/kilos) + Total, sin
- * inversionista. "Venta" pide Salida (cantidad/kilos) + Total + un
- * inversionista puntual. "Baja" pide Salida — cantidad + Salida — kilos
- * (mismo título/campo que Venta), sin inversionista. El saldo
- * (`balanceQuantity`/`balanceKilos`/`total` de la inversión) ya no se tipea
- * acá: lo calcula el backend y vive en `Investment` (ver ese doc).
+ * muestra: "Ingreso" pide Entrada (cantidad/kilos) + Total. "Venta" pide
+ * Salida (cantidad/kilos) + Total. "Baja" pide Salida — cantidad + Salida —
+ * kilos (mismo título/campo que Venta). TODO movimiento se atribuye a
+ * `investorUserId` (prop fija, el inversionista cuyo Kardex se está viendo
+ * — a pedido del usuario, 2026-10-14, antes solo "venta" lo pedía y con un
+ * combo propio acá) — ya no hay nada que elegir en este formulario. El
+ * saldo (`balanceQuantity`/`balanceKilos`/`total`) ya no se tipea acá: lo
+ * calcula el backend y vive en `Investment`/`InvestmentInvestor` (ver esos
+ * docs).
  *
  * `investmentTypeName` ('kilo'/'dinero', fijo por inversión) decide si
  * "Entrada — kilos"/"Salida — kilos" se muestran o no: en modo "dinero" NO
@@ -137,7 +131,7 @@ export function KardexEntryDialog({
   open,
   mode,
   entry,
-  investors,
+  investorUserId,
   investmentTypeName,
   onClose,
   onSave,
@@ -157,7 +151,6 @@ export function KardexEntryDialog({
     handleSubmit,
     control,
     setValue,
-    setError: setFieldError,
     formState: { errors },
   } = useForm<KardexEntryFormData>({
     resolver: zodResolver(kardexEntrySchema),
@@ -184,14 +177,6 @@ export function KardexEntryDialog({
   const total = useWatch({ control, name: 'total' });
   const avgWeight = useWatch({ control, name: 'avgWeight' });
 
-  // Cambiar de tipo descarta el inversionista elegido — evita mandar un
-  // `investorUserId` viejo si se pasa de "venta" a otro tipo y se vuelve.
-  useEffect(() => {
-    if (!isVenta) {
-      setValue('investorUserId', '');
-    }
-  }, [isVenta, setValue]);
-
   // Promedio calculado — se recalcula en cada cambio de cantidad + el
   // segundo valor que corresponda según el tipo de inversión: kilos (modo
   // "kilo") o `total` (modo "dinero", que no pide kilos). En Baja no hay
@@ -206,12 +191,6 @@ export function KardexEntryDialog({
   }, [isIngreso, isVenta, isDinero, entryQuantity, entryKilos, exitQuantity, exitKilos, total, setValue]);
 
   async function submit(data: KardexEntryFormData): Promise<void> {
-    // Solo "venta" se atribuye a un inversionista puntual — ver
-    // docs/investment/investment.md del backend ("Reglas de negocio actuales").
-    if (isVenta && !data.investorUserId) {
-      setFieldError('investorUserId', { message: 'Selecciona un inversionista' });
-      return;
-    }
     setSaving(true);
     setError(null);
     try {
@@ -219,7 +198,7 @@ export function KardexEntryDialog({
         entryDate: data.entryDate,
         detail: data.detail,
         movementTypeId: data.movementTypeId,
-        investorUserId: isVenta ? (data.investorUserId ?? null) : null,
+        investorUserId,
         avgWeight: Number(data.avgWeight),
         entryQuantity: Number(data.entryQuantity),
         entryKilos: Number(data.entryKilos),
@@ -270,21 +249,6 @@ export function KardexEntryDialog({
                 </option>
               ))}
             </Select>
-
-            {isVenta && (
-              <Select
-                label="Inversionista"
-                error={errors.investorUserId?.message}
-                disabled={loadingDetail}
-                {...register('investorUserId')}
-              >
-                {investors.map((investor) => (
-                  <option key={investor.id} value={investor.id}>
-                    {investor.fullName}
-                  </option>
-                ))}
-              </Select>
-            )}
 
             {isIngreso && (
               <div className={isDinero ? undefined : 'grid grid-cols-2 gap-4'}>
