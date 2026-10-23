@@ -14,11 +14,18 @@ import { useSidebar } from './sidebar-context';
  * referencia (ahí es un `.some()` de un solo nivel porque su nav es fijo de
  * 2 niveles; acá es recursivo porque el árbol viene del backend y puede
  * tener cualquier profundidad). */
+/** La ruta del ítem o cualquier subruta suya — ej. "Propiedades" sigue
+ * resaltado en `/properties/new` y `/properties/123` (alta/edición son
+ * pantallas propias desde 2026-10-23, ya no un diálogo). */
+function isPathActive(path: string | null, pathname: string): boolean {
+  return path !== null && (pathname === path || pathname.startsWith(`${path}/`));
+}
+
 function hasActiveDescendant(node: MenuTreeNode, pathname: string): boolean {
   return node.children.some((child) =>
     child.children.length > 0
       ? hasActiveDescendant(child, pathname)
-      : child.path === pathname,
+      : isPathActive(child.path, pathname),
   );
 }
 
@@ -53,7 +60,7 @@ function MenuNode({ node, depth }: { node: MenuTreeNode; depth: number }) {
   // params) se resalta Kardex, normal.
   const viaInvestmentsShortcut = pathname === '/kardex' && searchParams.has('propertyId');
   const isActive = isLeaf && node.path !== null && (
-    viaInvestmentsShortcut ? node.key === 'investments' : pathname === node.path
+    viaInvestmentsShortcut ? node.key === 'investments' : isPathActive(node.path, pathname)
   );
   const style = { paddingLeft: `${12 + depth * 14}px` };
 

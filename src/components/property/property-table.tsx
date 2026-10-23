@@ -1,6 +1,7 @@
 import { Pencil, Trash2 } from 'lucide-react';
 import type { Property } from '@/domain/property/property.entity';
 import { formatDate } from '@/lib/format-date';
+import { formatHectares } from '@/lib/polygon-area';
 
 interface PropertyTableProps {
   properties: Property[];
@@ -21,7 +22,7 @@ export function PropertyTable({ properties, loading, canEdit, canDelete, onEdit,
   }
 
   const showActions = canEdit || canDelete;
-  const columnCount = showActions ? 4 : 3;
+  const columnCount = showActions ? 5 : 4;
 
   return (
     <div className="data-table-wrapper">
@@ -30,6 +31,7 @@ export function PropertyTable({ properties, loading, canEdit, canDelete, onEdit,
           <tr>
             <th>Nombre</th>
             <th>Ubicación</th>
+            <th className="text-right">Superficie</th>
             <th>Creada el</th>
             {showActions && <th className="text-center">Acciones</th>}
           </tr>
@@ -48,6 +50,7 @@ export function PropertyTable({ properties, loading, canEdit, canDelete, onEdit,
                   Ver en Google Maps
                 </a>
               </td>
+              <td className="text-right">{property.boundary ? formatHectares(property.boundary) : '—'}</td>
               <td>{formatDate(property.createdAt)}</td>
               {showActions && (
                 <td>

@@ -29,7 +29,7 @@ export function InvestorSelectDialog({ investors, onSelect, onCancel }: Investor
           varias columnas) — con el ancho por defecto del diálogo
           (`max-w-md`, 28rem) esa tabla de una sola columna quedaba forzando
           scroll horizontal. Se ensancha el panel en vez de dejar de usar
-          `.data-table`, mismo criterio que `PropertyDialog`/`KardexEntryDialog`
+          `.data-table`, mismo criterio que `KardexEntryDialog`
           (`style={{ maxWidth }}` sobre `.dialog-panel`). */}
       <div className="dialog-panel flex flex-col gap-6" style={{ maxWidth: '44rem' }}>
         <div className="flex flex-col gap-1">

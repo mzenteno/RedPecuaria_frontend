@@ -29,6 +29,10 @@ export class PropertyRepositoryImpl implements PropertyRepository {
     return httpClient.get<PropertyOption[]>('/properties/options');
   }
 
+  async getById(id: string): Promise<Property> {
+    return httpClient.get<Property>(`/properties/${id}`);
+  }
+
   async create(data: CreatePropertyData): Promise<Property> {
     return httpClient.post<Property>('/properties', data);
   }

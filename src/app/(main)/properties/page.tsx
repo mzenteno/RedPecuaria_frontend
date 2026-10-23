@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useProperties } from '@/hooks/property/use-properties';
 import { usePermission } from '@/hooks/menu/use-permission';
 import type { Property } from '@/domain/property/property.entity';
@@ -8,20 +9,12 @@ import { PageToolbar } from '@/components/ui/page-toolbar';
 import { Pagination } from '@/components/ui/pagination';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { PropertyTable } from '@/components/property/property-table';
-import { PropertyDialog } from '@/components/property/property-dialog';
 import { RequirePermission } from '@/components/auth/require-permission';
 import { ApiError } from '@/infrastructure/http/http-client';
 
 const MENU_KEY = 'properties';
 const PAGE_SIZE = 10;
 const SEARCH_DEBOUNCE_MS = 300;
-
-interface DialogState {
-  open: boolean;
-  mode: 'create' | 'edit';
-  property: Property | null;
-  sessionId: number;
-}
 
 export default function PropertiesPage() {
   return (
@@ -32,6 +25,7 @@ export default function PropertiesPage() {
 }
 
 function PropertiesPageContent() {
+  const router = useRouter();
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -47,37 +41,20 @@ function PropertiesPageContent() {
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  const { properties, isLoading, total, totalPages, createProperty, updateProperty, deactivateProperty } =
-    useProperties(page, PAGE_SIZE, search);
+  const { properties, isLoading, total, totalPages, deactivateProperty } = useProperties(page, PAGE_SIZE, search);
   const { canCreate, canEdit, canDelete } = usePermission(MENU_KEY);
 
-  const [dialog, setDialog] = useState<DialogState>({
-    open: false,
-    mode: 'create',
-    property: null,
-    sessionId: 0,
-  });
   const [pendingDeactivate, setPendingDeactivate] = useState<Property | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // Alta/edición son pantallas propias (a pedido del usuario, 2026-10-23:
+  // el mapa del contorno necesita espacio), ya no un diálogo.
   function openCreate(): void {
-    setDialog((prev) => ({ open: true, mode: 'create', property: null, sessionId: prev.sessionId + 1 }));
+    router.push('/properties/new');
   }
 
   function openEdit(property: Property): void {
-    setDialog((prev) => ({ open: true, mode: 'edit', property, sessionId: prev.sessionId + 1 }));
-  }
-
-  function closeDialog(): void {
-    setDialog((prev) => ({ ...prev, open: false }));
-  }
-
-  async function handleSave(data: { name: string; latitude: number; longitude: number }): Promise<void> {
-    if (dialog.mode === 'create') {
-      await createProperty(data);
-    } else if (dialog.property) {
-      await updateProperty(dialog.property.id, data);
-    }
+    router.push(`/properties/${property.id}`);
   }
 
   async function confirmDeactivate(): Promise<void> {
@@ -112,15 +89,6 @@ function PropertiesPageContent() {
         />
         <Pagination page={page} pageSize={PAGE_SIZE} total={total} totalPages={totalPages} onPageChange={setPage} />
       </div>
-
-      <PropertyDialog
-        key={dialog.sessionId}
-        open={dialog.open}
-        mode={dialog.mode}
-        property={dialog.property}
-        onClose={closeDialog}
-        onSave={handleSave}
-      />
 
       <ConfirmDialog
         open={pendingDeactivate !== null}

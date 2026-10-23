@@ -8,6 +8,8 @@ export interface PropertyRepository {
   /** `GET /properties/options` — liviano y sin paginar, para combos (ver
    * `PropertyOption`). */
   listOptions(): Promise<PropertyOption[]>;
+  /** `GET /properties/:id` — para la pantalla de edición. */
+  getById(id: string): Promise<Property>;
   create(data: CreatePropertyData): Promise<Property>;
   update(id: string, data: UpdatePropertyData): Promise<Property>;
   deactivate(id: string): Promise<void>;
