@@ -23,8 +23,12 @@ import { KardexEntryDialog } from '@/components/kardex/kardex-entry-dialog';
 import { InvestorSelectDialog } from '@/components/kardex/investor-select-dialog';
 import { RequirePermission } from '@/components/auth/require-permission';
 import { ApiError } from '@/infrastructure/http/http-client';
-import { listKardexEntriesByInvestmentUseCase } from '@/infrastructure/di/kardex.container';
+import {
+  getKardexEntryByIdUseCase,
+  listKardexEntriesByInvestmentUseCase,
+} from '@/infrastructure/di/kardex.container';
 import { downloadKardexPdf } from '@/lib/kardex-pdf';
+import { downloadLiquidationPdf } from '@/lib/liquidation-pdf';
 import { formatNumber } from '@/lib/format-number';
 import { formatDate } from '@/lib/format-date';
 import { capitalize } from '@/lib/capitalize';
@@ -160,6 +164,7 @@ function KardexPageContent() {
   const activeCompanyId = useActiveCompanyId();
   const companyLogoUrl = companies.find((c) => c.id === activeCompanyId)?.logoUrl ?? null;
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [generatingLiquidationId, setGeneratingLiquidationId] = useState<string | null>(null);
 
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
@@ -295,6 +300,28 @@ function KardexPageContent() {
       setErrorMessage(err instanceof ApiError ? err.message : 'Error al cambiar el estado de la inversión');
     } finally {
       setTogglingFinished(false);
+    }
+  }
+
+  // Liquidación de compra/venta de UN movimiento: el listado no trae precio
+  // ni gastos, así que se pide el detalle completo por id antes de armarla.
+  async function handleLiquidation(entry: KardexEntryListItem): Promise<void> {
+    if (!investmentDetail) return;
+    setGeneratingLiquidationId(entry.id);
+    try {
+      const detail = await getKardexEntryByIdUseCase.execute(entry.id);
+      await downloadLiquidationPdf({
+        kind: entry.movementTypeName === 'ingreso' ? 'compra' : 'venta',
+        entry: detail,
+        investorName: selectedInvestorName,
+        propertyName: investmentDetail.propertyName,
+        companyLogoUrl,
+        investorSharePercent: investmentDetail.investorSharePercent,
+      });
+    } catch (err) {
+      setErrorMessage(err instanceof ApiError ? err.message : 'Error al generar la liquidación');
+    } finally {
+      setGeneratingLiquidationId(null);
     }
   }
 
@@ -466,6 +493,8 @@ function KardexPageContent() {
           canDelete={canDelete && canModifyEntries}
           onEdit={openEdit}
           onDeactivate={setPendingDeactivate}
+          onLiquidation={handleLiquidation}
+          generatingLiquidationId={generatingLiquidationId}
         />
         <Pagination
           page={entriesPage}

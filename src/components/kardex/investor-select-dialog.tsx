@@ -5,6 +5,11 @@ import { Button } from '@/components/ui/button';
 
 interface InvestorSelectDialogProps {
   investors: UserOption[];
+  /** Si se pasa, cada fila muestra el estado de ese inversionista en la
+   * inversión (Activa/Terminada — se finaliza por inversionista desde su
+   * Kardex). La pantalla de Inversiones lo tiene en el listado; el respaldo
+   * de `kardex/page.tsx` no lo pasa. */
+  finishedInvestorIds?: string[];
   onSelect: (investorUserId: string) => void;
   onCancel: () => void;
 }
@@ -22,7 +27,17 @@ interface InvestorSelectDialogProps {
  * clickeables en vez de un `<select>`, porque elegir YA selecciona (no hace
  * falta un botón de confirmar aparte).
  */
-export function InvestorSelectDialog({ investors, onSelect, onCancel }: InvestorSelectDialogProps) {
+/** Mismo estilo que la columna "Estado" de `InvestmentTable` (verde
+ * "Activa" / gris "Terminada"). */
+function renderStatus(isFinished: boolean) {
+  return (
+    <span className="tipo-label" style={{ color: isFinished ? 'var(--text-muted)' : 'var(--primary)' }}>
+      {isFinished ? 'Terminada' : 'Activa'}
+    </span>
+  );
+}
+
+export function InvestorSelectDialog({ investors, finishedInvestorIds, onSelect, onCancel }: InvestorSelectDialogProps) {
   return (
     <div className="dialog-overlay">
       {/* `.data-table` trae `min-width: 40rem` fijo (pensado para tablas de
@@ -43,11 +58,12 @@ export function InvestorSelectDialog({ investors, onSelect, onCancel }: Investor
               {investors.map((investor) => (
                 <tr key={investor.id} onClick={() => onSelect(investor.id)} className="cursor-pointer">
                   <td>{investor.fullName}</td>
+                  {finishedInvestorIds && <td className="text-right">{renderStatus(finishedInvestorIds.includes(investor.id))}</td>}
                 </tr>
               ))}
               {investors.length === 0 && (
                 <tr>
-                  <td className="data-table-empty">Esta inversión no tiene inversionistas.</td>
+                  <td colSpan={finishedInvestorIds ? 2 : 1} className="data-table-empty">Esta inversión no tiene inversionistas.</td>
                 </tr>
               )}
             </tbody>

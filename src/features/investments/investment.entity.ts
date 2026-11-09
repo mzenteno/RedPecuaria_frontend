@@ -12,6 +12,10 @@ export interface Investment {
   investmentTypeName: string;
   gestion: number;
   description: string;
+  /** % de la ganancia de kilos para el inversionista en una venta (0–100;
+   * la propiedad se queda con el resto) — distribución de la liquidación de
+   * venta. `null` = sin definir. */
+  investorSharePercent: number | null;
   /** Saldo vigente — ya no vive por fila en el kardex, se mantiene acá y se
    * actualiza en cada alta/edición/baja de un `KardexEntry` (ver
    * docs/investment/investment.md del backend). En inversiones "por
@@ -50,6 +54,9 @@ export interface InvestmentListItem {
   isFinished: boolean;
   createdAt: string;
   investorIds: string[];
+  /** Subconjunto de `investorIds` con su parte de la inversión terminada
+   * (se finaliza por inversionista desde su Kardex). */
+  finishedInvestorIds: string[];
 }
 
 export interface CreateInvestmentData {
@@ -59,6 +66,7 @@ export interface CreateInvestmentData {
   investmentTypeId: string;
   gestion: number;
   description: string;
+  investorSharePercent: number | null;
   investorUserIds: string[];
 }
 
@@ -66,5 +74,6 @@ export interface UpdateInvestmentData {
   propertyId: string;
   gestion: number;
   description: string;
+  investorSharePercent: number | null;
   investorUserIds: string[];
 }

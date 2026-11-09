@@ -1,4 +1,4 @@
-import { Pencil, Trash2 } from 'lucide-react';
+import { FileText, Pencil, Trash2 } from 'lucide-react';
 import type { KardexEntryListItem } from '@/domain/kardex/kardex-entry.entity';
 import { formatDateOnly } from '@/lib/format-date';
 import { formatNumber } from '@/lib/format-number';
@@ -20,6 +20,12 @@ interface KardexTableProps {
   canDelete: boolean;
   onEdit: (entry: KardexEntryListItem) => void;
   onDeactivate: (entry: KardexEntryListItem) => void;
+  /** Liquidación de compra (Ingreso) o venta (Venta) en PDF — disponible
+   * para cualquiera que vea el Kardex, sin depender de `canEdit`/`canDelete`. */
+  onLiquidation: (entry: KardexEntryListItem) => void;
+  /** Id del movimiento cuya liquidación se está generando (deshabilita su
+   * botón mientras tanto). */
+  generatingLiquidationId: string | null;
 }
 
 
@@ -90,6 +96,8 @@ export function KardexTable({
   canDelete,
   onEdit,
   onDeactivate,
+  onLiquidation,
+  generatingLiquidationId,
 }: KardexTableProps) {
   if (loading) {
     return (
@@ -100,8 +108,9 @@ export function KardexTable({
   }
 
   const isDinero = investmentTypeName === 'dinero';
-  const showActions = canEdit || canDelete;
-  const columnCount = showActions ? 13 : 12;
+  // Siempre hay columna de acciones: la liquidación en PDF no depende de
+  // permisos de edición.
+  const columnCount = 13;
 
   return (
     <div className="data-table-wrapper">
@@ -121,7 +130,7 @@ export function KardexTable({
             <th colSpan={2} className="text-center">Saldo</th>
             <th rowSpan={2} className="text-right">Debe</th>
             <th rowSpan={2} className="text-right">Haber</th>
-            {showActions && <th rowSpan={2} className="text-center">Acciones</th>}
+            <th rowSpan={2} className="text-center">Acciones</th>
           </tr>
           <tr>
             <th className="text-right">Cant.</th>
@@ -161,32 +170,42 @@ export function KardexTable({
               </td>
               <td className="text-right">{isIngreso ? formatNumber(entry.debe) : ''}</td>
               <td className="text-right">{isVenta || (isBaja && isDinero) ? formatNumber(entry.haber) : ''}</td>
-              {showActions && (
-                <td>
-                  <div className="flex items-center justify-center gap-1">
-                    {canEdit && (
-                      <button
-                        type="button"
-                        onClick={() => onEdit(entry)}
-                        className="data-action-btn"
-                        aria-label="Editar"
-                      >
-                        <Pencil className="h-5 w-5" strokeWidth={1.5} />
-                      </button>
-                    )}
-                    {canDelete && (
-                      <button
-                        type="button"
-                        onClick={() => onDeactivate(entry)}
-                        className="data-action-btn"
-                        aria-label="Eliminar"
-                      >
-                        <Trash2 className="h-5 w-5" strokeWidth={1.5} />
-                      </button>
-                    )}
-                  </div>
-                </td>
-              )}
+              <td>
+                <div className="flex items-center justify-center gap-1">
+                  {(isIngreso || isVenta) && (
+                    <button
+                      type="button"
+                      onClick={() => onLiquidation(entry)}
+                      disabled={generatingLiquidationId === entry.id}
+                      className="data-action-btn disabled:opacity-40"
+                      aria-label={isIngreso ? 'Liquidación de compra' : 'Liquidación de venta'}
+                      title={isIngreso ? 'Liquidación de compra (PDF)' : 'Liquidación de venta (PDF)'}
+                    >
+                      <FileText className="h-5 w-5" strokeWidth={1.5} />
+                    </button>
+                  )}
+                  {canEdit && (
+                    <button
+                      type="button"
+                      onClick={() => onEdit(entry)}
+                      className="data-action-btn"
+                      aria-label="Editar"
+                    >
+                      <Pencil className="h-5 w-5" strokeWidth={1.5} />
+                    </button>
+                  )}
+                  {canDelete && (
+                    <button
+                      type="button"
+                      onClick={() => onDeactivate(entry)}
+                      className="data-action-btn"
+                      aria-label="Eliminar"
+                    >
+                      <Trash2 className="h-5 w-5" strokeWidth={1.5} />
+                    </button>
+                  )}
+                </div>
+              </td>
             </tr>
             );
           })}
@@ -212,7 +231,7 @@ export function KardexTable({
             <td></td>
             <td className="text-right font-semibold">{formatNumber(totalDebe)}</td>
             <td className="text-right font-semibold">{formatNumber(totalHaber)}</td>
-            {showActions && <td />}
+            <td />
           </tr>
         </tfoot>
       </table>

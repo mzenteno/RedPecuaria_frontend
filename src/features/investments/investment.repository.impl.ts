@@ -34,6 +34,7 @@ export class InvestmentRepositoryImpl implements InvestmentRepository {
       propertyId: params.propertyId,
       investorUserId: params.investorUserId,
       search: params.search,
+      status: params.status,
     });
     const result = await httpClient.getPaginated<InvestmentListItem>(`/investments/by-gestion?${query}`);
     return { items: result.items, total: result.total, page: result.page, pageSize: result.pageSize };
@@ -49,6 +50,7 @@ export class InvestmentRepositoryImpl implements InvestmentRepository {
       gestion: params.gestion,
       investorUserId: params.investorUserId,
       search: params.search,
+      status: params.status,
     });
     const result = await httpClient.getPaginated<InvestmentListItem>(`/investments/by-property?${query}`);
     return { items: result.items, total: result.total, page: result.page, pageSize: result.pageSize };
@@ -61,6 +63,7 @@ export class InvestmentRepositoryImpl implements InvestmentRepository {
       pageSize: params.pageSize,
       propertyId: params.propertyId,
       search: params.search,
+      status: params.status,
     });
     const result = await httpClient.getPaginated<InvestmentListItem>(`/investments/by-investor?${query}`);
     return { items: result.items, total: result.total, page: result.page, pageSize: result.pageSize };

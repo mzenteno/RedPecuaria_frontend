@@ -14,6 +14,7 @@ import type {
   ListInvestmentsByGestionParams,
   ListInvestmentsByPropertyPaginatedParams,
   ListInvestmentsByInvestorParams,
+  InvestmentStatus,
 } from '@/features/investments/investment.repository';
 import { Select } from '@/components/ui/select';
 import { PageToolbar } from '@/components/ui/page-toolbar';
@@ -54,6 +55,12 @@ export default function InvestmentsPage() {
   );
 }
 
+/** `status` de la URL ("Volver a Inversiones" desde el Kardex) o del combo —
+ * cualquier otro valor se ignora. */
+function parseStatus(value: string | null): InvestmentStatus | null {
+  return value === 'active' || value === 'finished' ? value : null;
+}
+
 function InvestmentsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -66,9 +73,24 @@ function InvestmentsPageContent() {
   // (`kardex/page.tsx`), con estos mismos nombres de parámetro, para no
   // perder nada ni "adivinar" un filtro nuevo a partir de la inversión
   // puntual que se abrió.
-  const [gestion, setGestion] = useState<string>(() => searchParams.get('gestion') ?? '');
+  // Entrada "limpia" (desde el menú, sin ningún filtro en la URL): arranca
+  // con la gestión actual y el estado "Activa" (a pedido del usuario,
+  // 2026-11-08). Si la URL trae filtros ("Volver a Inversiones" desde el
+  // Kardex) se respetan tal cual, aunque el usuario hubiera limpiado la
+  // gestión o el estado — no se le vuelven a imponer los valores por defecto.
+  const [isFreshEntry] = useState(() =>
+    ['gestion', 'propertyId', 'investorUserId', 'status', 'search'].every((key) => !searchParams.has(key)),
+  );
+  const [gestion, setGestion] = useState<string>(
+    () => searchParams.get('gestion') ?? (isFreshEntry ? String(CURRENT_YEAR) : ''),
+  );
   const [propertyId, setPropertyId] = useState<string | null>(() => searchParams.get('propertyId'));
   const [investorUserId, setInvestorUserId] = useState<string | null>(() => searchParams.get('investorUserId'));
+  // Combo "Estado" (a pedido del usuario, 2026-11-02): filtro adicional como
+  // Propiedad — no dispara la consulta por sí solo. Vacío = ambos estados.
+  const [status, setStatus] = useState<InvestmentStatus | null>(() =>
+    isFreshEntry ? 'active' : parseStatus(searchParams.get('status')),
+  );
   const [searchInput, setSearchInput] = useState(() => searchParams.get('search') ?? '');
   const [search, setSearch] = useState(() => searchParams.get('search') ?? '');
   const [page, setPage] = useState(() => Number(searchParams.get('page') ?? '1'));
@@ -119,6 +141,11 @@ function InvestmentsPageContent() {
     setPage(1);
   }
 
+  function handleStatusChange(value: InvestmentStatus | null): void {
+    setStatus(value);
+    setPage(1);
+  }
+
   // Los tres combos son formas independientes de traer la lista —
   // cualquiera de los tres alcanza para ver algo, ninguno depende de los
   // otros dos. Si los tres están vacíos no hay nada que mostrar. La
@@ -144,6 +171,7 @@ function InvestmentsPageContent() {
           propertyId: propertyId ?? undefined,
           investorUserId: investorUserId ?? undefined,
           search: search || undefined,
+          status: status ?? undefined,
         }
       : null;
 
@@ -155,6 +183,7 @@ function InvestmentsPageContent() {
           pageSize: PAGE_SIZE,
           propertyId: propertyId ?? undefined,
           search: search || undefined,
+          status: status ?? undefined,
         }
       : null;
 
@@ -165,6 +194,7 @@ function InvestmentsPageContent() {
           page,
           pageSize: PAGE_SIZE,
           search: search || undefined,
+          status: status ?? undefined,
         }
       : null;
 
@@ -201,6 +231,7 @@ function InvestmentsPageContent() {
     if (gestion) params.set('gestion', gestion);
     if (propertyId) params.set('propertyId', propertyId);
     if (investorUserId) params.set('investorUserId', investorUserId);
+    if (status) params.set('status', status);
     if (search) params.set('search', search);
     if (page > 1) params.set('page', String(page));
     return params.toString();
@@ -229,11 +260,19 @@ function InvestmentsPageContent() {
     investmentTypeId: string;
     gestion: number;
     description: string;
+    investorSharePercent: number | null;
     investorUserIds: string[];
   }): Promise<void> {
     if (dialog.mode === 'create') {
-      const { propertyId, investmentTypeId, gestion, description, investorUserIds } = data;
-      await createInvestment({ propertyId, investmentTypeId, gestion, description, investorUserIds });
+      const { propertyId, investmentTypeId, gestion, description, investorSharePercent, investorUserIds } = data;
+      await createInvestment({
+        propertyId,
+        investmentTypeId,
+        gestion,
+        description,
+        investorSharePercent,
+        investorUserIds,
+      });
     } else if (dialog.investment) {
       // `investmentTypeId` viaja igual (el diálogo lo manda siempre) pero
       // no existe en `UpdateInvestmentData` ni en el DTO del backend — se
@@ -271,7 +310,7 @@ function InvestmentsPageContent() {
               </button>
             </div>
           )}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Select
               label="Gestión"
               value={gestion}
@@ -308,6 +347,15 @@ function InvestmentsPageContent() {
                   {investor.fullName}
                 </option>
               ))}
+            </Select>
+            <Select
+              label="Estado"
+              value={status ?? ''}
+              onChange={(e) => handleStatusChange(parseStatus(e.target.value))}
+              onClear={() => handleStatusChange(null)}
+            >
+              <option value="active">Activa</option>
+              <option value="finished">Terminada</option>
             </Select>
           </div>
         </div>
@@ -369,6 +417,7 @@ function InvestmentsPageContent() {
       {kardexInvestment && (
         <InvestorSelectDialog
           investors={kardexInvestors}
+          finishedInvestorIds={kardexInvestment.finishedInvestorIds}
           onSelect={openKardexForInvestor}
           onCancel={() => setKardexInvestment(null)}
         />

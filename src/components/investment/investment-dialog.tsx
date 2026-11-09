@@ -29,6 +29,14 @@ const investmentSchema = z.object({
   investmentTypeId: z.string().min(1, 'Selecciona un tipo de inversión'),
   gestion: z.string().min(1, 'Selecciona una gestión'),
   description: z.string().min(1, 'La descripción es obligatoria'),
+  // Opcional: vacío = sin definir (la liquidación de venta deja la
+  // participación en blanco).
+  investorSharePercent: z
+    .string()
+    .refine(
+      (value) => value.trim() === '' || (!Number.isNaN(Number(value)) && Number(value) >= 0 && Number(value) <= 100),
+      'Tiene que ser un número entre 0 y 100',
+    ),
 });
 
 type InvestmentFormData = z.infer<typeof investmentSchema>;
@@ -52,6 +60,7 @@ interface InvestmentDialogProps {
     investmentTypeId: string;
     gestion: number;
     description: string;
+    investorSharePercent: number | null;
     investorUserIds: string[];
   }) => Promise<void>;
 }
@@ -126,6 +135,10 @@ export function InvestmentDialog({
       investmentTypeId: mode === 'edit' ? (investmentDetail?.investmentTypeId ?? '') : '',
       gestion: mode === 'edit' ? (investmentDetail ? String(investmentDetail.gestion) : '') : '',
       description: mode === 'edit' ? (investmentDetail?.description ?? '') : '',
+      investorSharePercent:
+        mode === 'edit' && investmentDetail?.investorSharePercent != null
+          ? String(investmentDetail.investorSharePercent)
+          : '',
     },
   });
 
@@ -142,6 +155,7 @@ export function InvestmentDialog({
         investmentTypeId: data.investmentTypeId,
         gestion: Number(data.gestion),
         description: data.description,
+        investorSharePercent: data.investorSharePercent.trim() === '' ? null : Number(data.investorSharePercent),
         investorUserIds: investorIds,
       });
       onClose();
@@ -224,6 +238,18 @@ export function InvestmentDialog({
               disabled={loadingDetail}
               error={errors.description?.message}
               {...register('description')}
+            />
+
+            <Input
+              label="Participación del inversionista % (en la ganancia de kilos)"
+              type="number"
+              step="0.01"
+              min={0}
+              max={100}
+              placeholder="Ej. 45 — la propiedad se queda con el resto"
+              disabled={loadingDetail}
+              error={errors.investorSharePercent?.message}
+              {...register('investorSharePercent')}
             />
 
             <MultiSelect

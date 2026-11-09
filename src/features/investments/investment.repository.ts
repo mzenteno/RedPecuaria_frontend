@@ -8,6 +8,7 @@ export interface ListInvestmentsByGestionParams {
   propertyId?: string;
   investorUserId?: string;
   search?: string;
+  status?: InvestmentStatus;
 }
 
 export interface ListInvestmentsByPropertyPaginatedParams {
@@ -17,9 +18,14 @@ export interface ListInvestmentsByPropertyPaginatedParams {
   gestion?: number;
   investorUserId?: string;
   search?: string;
+  status?: InvestmentStatus;
 }
 
-export type MyInvestmentsStatus = 'active' | 'finished';
+/** "Activas"/"Terminadas". En "Mis inversiones" (Kardex) es el estado del
+ * inversionista; en los listados de la pantalla de Inversiones (combo
+ * "Estado") es el estado de la inversión. Sin él, ambos estados. */
+export type InvestmentStatus = 'active' | 'finished';
+export type MyInvestmentsStatus = InvestmentStatus;
 
 export interface ListMyInvestmentsParams extends PaginationParams {
   /** Pestañas "Activas"/"Terminadas" de "Mis inversiones" (Kardex). */
@@ -32,6 +38,7 @@ export interface ListInvestmentsByInvestorParams {
   pageSize: number;
   propertyId?: string;
   search?: string;
+  status?: InvestmentStatus;
 }
 
 /** `companyId` nunca aparece: siempre la empresa activa. `propertyId` sí es

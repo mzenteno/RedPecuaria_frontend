@@ -15,8 +15,29 @@ export interface KardexEntry {
   exitKilos: number;
   /** Dato que tipea el usuario en Ingreso/Venta (0 en Baja) — el saldo
    * acumulado vive en `Investment.balanceQuantity`/`balanceKilos`/`total`,
-   * no acá (ver `features/investments/investment.entity.ts`). */
+   * no acá (ver `features/investments/investment.entity.ts`). Desde
+   * 2026-10-25 es el total FINAL: subtotal + `commission` + `transport` +
+   * `otherExpenses` (ver `computeTotal` en `KardexEntryDialog`). */
   total: number;
+  /** Bs. por kilo — solo Ingreso/Venta en inversiones "por kilo" (0 en el
+   * resto). Subtotal = kilos × este precio. */
+  pricePerKilo: number;
+  /** Desbaste en kg — solo Ingreso en modo "kilo" (0 en el resto). Se
+   * descuenta de `entryKilos` solo para el subtotal (peso neto × precio); el
+   * saldo de kilos usa `entryKilos` completo. */
+  shrinkageKilos: number;
+  /** Solo Venta en modo "kilo" — distribución de la liquidación de venta
+   * (no entran en `total` ni en el saldo): peso con el que entró cada animal
+   * (kg) y la comisión/alimento que se descuentan de lo que cobra el
+   * inversionista. */
+  initialWeightPerHead: number;
+  distributionCommission: number;
+  feedCost: number;
+  /** Gastos de Ingreso/Venta, ya sumados en `total` (0 en Baja). Solo se
+   * muestran en el diálogo del movimiento, no en la tabla ni en el PDF. */
+  commission: number;
+  transport: number;
+  otherExpenses: number;
   createdAt: string;
 }
 

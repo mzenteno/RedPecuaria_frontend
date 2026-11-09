@@ -30,6 +30,17 @@ const kardexEntrySchema = z.object({
   exitQuantity: numberField('La cantidad de salida'),
   exitKilos: numberField('Los kilos de salida'),
   total: numberField('El total'),
+  pricePerKilo: numberField('El precio por kilo'),
+  shrinkageKilos: numberField('El desbaste'),
+  initialWeightPerHead: numberField('El peso inicial por cabeza'),
+  distributionCommission: numberField('La comisión de distribución'),
+  feedCost: numberField('El alimento'),
+  commission: numberField('La comisión'),
+  transport: numberField('El transporte'),
+  otherExpenses: numberField('Otros gastos'),
+  // Solo del formulario (modo "dinero"): el monto base antes de gastos. No
+  // se guarda — se reconstruye como `total - gastos` al editar.
+  baseAmount: numberField('El monto'),
 });
 
 type KardexEntryFormData = z.infer<typeof kardexEntrySchema>;
@@ -59,6 +70,7 @@ interface KardexEntryDialogProps {
  * input no muestre "36506" en vez de "36506.00" al editar un movimiento
  * existente. */
 function toFormValues(entry: KardexEntry | null): KardexEntryFormData {
+  const expenses = entry ? entry.commission + entry.transport + entry.otherExpenses : 0;
   return {
     entryDate: entry?.entryDate ?? '',
     detail: entry?.detail ?? '',
@@ -69,7 +81,40 @@ function toFormValues(entry: KardexEntry | null): KardexEntryFormData {
     exitQuantity: entry ? String(entry.exitQuantity) : '0',
     exitKilos: entry ? entry.exitKilos.toFixed(2) : '0.00',
     total: entry ? entry.total.toFixed(2) : '0.00',
+    pricePerKilo: entry ? entry.pricePerKilo.toFixed(2) : '0.00',
+    shrinkageKilos: entry ? entry.shrinkageKilos.toFixed(2) : '0.00',
+    initialWeightPerHead: entry ? entry.initialWeightPerHead.toFixed(2) : '0.00',
+    distributionCommission: entry ? entry.distributionCommission.toFixed(2) : '0.00',
+    feedCost: entry ? entry.feedCost.toFixed(2) : '0.00',
+    commission: entry ? entry.commission.toFixed(2) : '0.00',
+    transport: entry ? entry.transport.toFixed(2) : '0.00',
+    otherExpenses: entry ? entry.otherExpenses.toFixed(2) : '0.00',
+    baseAmount: entry ? (entry.total - expenses).toFixed(2) : '0.00',
   };
+}
+
+function toNumber(value: string): number {
+  const parsed = Number(value);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+/** Subtotal antes de gastos: kilos × precio por kilo (modo "kilo"; kilos de
+ * Entrada en Ingreso, de Salida en Venta) o el monto tipeado (modo
+ * "dinero", donde el precio por kilo es solo informativo). Redondeado a
+ * centavos, como se guarda. */
+function computeSubtotal(values: KardexEntryFormData, isDinero: boolean, isIngreso: boolean): number {
+  if (isDinero) return toNumber(values.baseAmount);
+  // Se paga/cobra el peso NETO: peso total − desbaste (Ingreso 2026-11-08,
+  // Venta 2026-11-08 también).
+  const kilos = toNumber(isIngreso ? values.entryKilos : values.exitKilos) - toNumber(values.shrinkageKilos);
+  return Math.round(kilos * toNumber(values.pricePerKilo) * 100) / 100;
+}
+
+/** Total Bs. = subtotal + comisión + transporte + otros gastos — los gastos
+ * se SUMAN también en Venta (a pedido del usuario, 2026-10-25). */
+function computeTotal(values: KardexEntryFormData, isDinero: boolean, isIngreso: boolean): string {
+  const expenses = toNumber(values.commission) + toNumber(values.transport) + toNumber(values.otherExpenses);
+  return (computeSubtotal(values, isDinero, isIngreso) + expenses).toFixed(2);
 }
 
 
@@ -109,7 +154,7 @@ function computeAverage(quantity: string, value: string): string {
  * promedio" (mismo cálculo, `computeAverage`, pero con `total` en vez de
  * kilos).
  *
- * "Peso/Monto promedio" en Ingreso/Venta = kilos-o-total / cantidad — se
+ * "Peso/Monto promedio" en Ingreso/Venta = kilos-o-monto (sin gastos) / cantidad — se
  * calcula solo, no se tipea, y se muestra debajo del par Cantidad/Kilos que
  * lo determina. En **Baja** el mismo campo `avgWeight` se reusa distinto (a
  * pedido del usuario, 2026-09-24): en vez de mostrarse como un promedio
@@ -120,6 +165,15 @@ function computeAverage(quantity: string, value: string): string {
  * informativo. `total` de Baja se mantiene siempre en 0 (no se toca) para
  * no ensuciar Debe/Haber — la pérdida se resta del `kilos`/`total` de
  * `Investment`, no del `total` del propio `KardexEntry`.
+ *
+ * Precio y gastos (a pedido del usuario, 2026-10-25), solo Ingreso/Venta:
+ * en modo "kilo" se tipea "Precio por kilo" (subtotal = kilos × precio); en
+ * modo "dinero" se tipea "Entrada/Salida — Bs." directo (subtotal = ese
+ * monto) y el precio por kilo es solo informativo (no hay kilos). Mismo
+ * orden de campos en ambos modos.
+ * Después van Comisión, Transporte y Otros gastos, y "Total Bs." = subtotal
+ * + gastos, calculado (ya no se tipea). Los gastos se SUMAN también en
+ * Venta. Solo se ven en este diálogo, no en la tabla ni en el PDF.
  *
  * En edición, `entry` (la fila de la lista, a propósito liviana — ver
  * `KardexEntryListItem`) solo se usa para saber QUÉ id editar. Todos los
@@ -151,6 +205,7 @@ export function KardexEntryDialog({
     handleSubmit,
     control,
     setValue,
+    getValues,
     formState: { errors },
   } = useForm<KardexEntryFormData>({
     resolver: zodResolver(kardexEntrySchema),
@@ -176,21 +231,65 @@ export function KardexEntryDialog({
   const exitKilos = useWatch({ control, name: 'exitKilos' });
   const total = useWatch({ control, name: 'total' });
   const avgWeight = useWatch({ control, name: 'avgWeight' });
+  const pricePerKilo = useWatch({ control, name: 'pricePerKilo' });
+  const baseAmount = useWatch({ control, name: 'baseAmount' });
+  const shrinkageKilos = useWatch({ control, name: 'shrinkageKilos' });
+  const netKilos = toNumber(isIngreso ? entryKilos : exitKilos) - toNumber(shrinkageKilos);
+
+  // Total Bs. se recalcula SOLO cuando el usuario toca uno de los campos de
+  // los que depende (no con un `useEffect` sobre los valores): así, al
+  // editar un movimiento viejo sin tocar esos campos, su `total` guardado
+  // queda exacto — el precio por kilo de los movimientos previos a
+  // 2026-10-25 se reconstruyó redondeado (`total / kilos`), y recalcular
+  // kilos × precio podría correrlo unos centavos.
+  function recalcTotal(): void {
+    const values = getValues();
+    const typeName = movementTypes.find((type) => type.id === values.movementTypeId)?.name;
+    if (typeName !== 'ingreso' && typeName !== 'venta') return;
+    setValue('total', computeTotal(values, isDinero, typeName === 'ingreso'));
+  }
+
+  const subtotal = computeSubtotal(
+    {
+      ...getValues(),
+      entryKilos,
+      exitKilos,
+      pricePerKilo,
+      shrinkageKilos,
+    },
+    isDinero,
+    isIngreso,
+  );
 
   // Promedio calculado — se recalcula en cada cambio de cantidad + el
   // segundo valor que corresponda según el tipo de inversión: kilos (modo
   // "kilo") o `total` (modo "dinero", que no pide kilos). En Baja no hay
   // nada que calcular (no pide ninguno de los dos), así que el campo sigue
   // siendo el `register` normal.
+  // En modo "dinero" el promedio es Entrada/Salida Bs. / cantidad, SIN
+  // gastos (2026-10-26) — mismo criterio que el peso promedio en modo
+  // "kilo", que solo mira los kilos.
   useEffect(() => {
     if (isIngreso) {
-      setValue('avgWeight', computeAverage(entryQuantity, isDinero ? total : entryKilos));
+      setValue('avgWeight', computeAverage(entryQuantity, isDinero ? baseAmount : entryKilos));
     } else if (isVenta) {
-      setValue('avgWeight', computeAverage(exitQuantity, isDinero ? total : exitKilos));
+      setValue('avgWeight', computeAverage(exitQuantity, isDinero ? baseAmount : exitKilos));
     }
-  }, [isIngreso, isVenta, isDinero, entryQuantity, entryKilos, exitQuantity, exitKilos, total, setValue]);
+  }, [isIngreso, isVenta, isDinero, entryQuantity, entryKilos, exitQuantity, exitKilos, baseAmount, setValue]);
 
   async function submit(data: KardexEntryFormData): Promise<void> {
+    // Baja no lleva precio ni gastos — se mandan en 0 aunque el formulario
+    // haya quedado con algo tipeado de un tipo de movimiento elegido antes.
+    const hasExpenses = isIngreso || isVenta;
+    // Desbaste: Ingreso y Venta en modo "kilo".
+    const hasShrinkage = hasExpenses && !isDinero;
+    // Distribución de la liquidación de venta: solo Venta en modo "kilo".
+    const hasDistribution = isVenta && !isDinero;
+    const grossKilos = Number(isIngreso ? data.entryKilos : data.exitKilos);
+    if (hasShrinkage && Number(data.shrinkageKilos) > grossKilos) {
+      setError(`El desbaste no puede ser mayor que los kilos de ${isIngreso ? 'entrada' : 'salida'}`);
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -205,6 +304,14 @@ export function KardexEntryDialog({
         exitQuantity: Number(data.exitQuantity),
         exitKilos: Number(data.exitKilos),
         total: Number(data.total),
+        pricePerKilo: hasExpenses ? Number(data.pricePerKilo) : 0,
+        shrinkageKilos: hasShrinkage ? Number(data.shrinkageKilos) : 0,
+        initialWeightPerHead: hasDistribution ? Number(data.initialWeightPerHead) : 0,
+        distributionCommission: hasDistribution ? Number(data.distributionCommission) : 0,
+        feedCost: hasDistribution ? Number(data.feedCost) : 0,
+        commission: hasExpenses ? Number(data.commission) : 0,
+        transport: hasExpenses ? Number(data.transport) : 0,
+        otherExpenses: hasExpenses ? Number(data.otherExpenses) : 0,
       });
       onClose();
     } catch (err) {
@@ -214,11 +321,52 @@ export function KardexEntryDialog({
     }
   }
 
+  /** Campo de Bs./kilos que interviene en el Total — al cambiar, recalcula
+   * (ver `recalcTotal`). Función que devuelve JSX, no un componente: uno
+   * definido acá adentro se remontaría en cada render y el input perdería
+   * el foco al tipear. */
+  function renderMoneyField(
+    name:
+      | 'baseAmount'
+      | 'entryKilos'
+      | 'exitKilos'
+      | 'pricePerKilo'
+      | 'shrinkageKilos'
+      | 'initialWeightPerHead'
+      | 'distributionCommission'
+      | 'feedCost'
+      | 'commission'
+      | 'transport'
+      | 'otherExpenses',
+    label: string,
+  ) {
+    return (
+      <Controller
+        key={name}
+        control={control}
+        name={name}
+        render={({ field }) => (
+          <FormattedNumberInput
+            label={label}
+            disabled={loadingDetail}
+            error={errors[name]?.message}
+            value={field.value}
+            onChange={(value) => {
+              field.onChange(value);
+              recalcTotal();
+            }}
+            onBlur={field.onBlur}
+          />
+        )}
+      />
+    );
+  }
+
   if (!open) return null;
 
   return (
     <div className="dialog-overlay">
-      <div className="dialog-panel dialog-panel-lg flex flex-col gap-8" style={{ maxWidth: '32rem' }}>
+      <div className="dialog-panel dialog-panel-lg flex flex-col gap-8" style={{ maxWidth: '42rem' }}>
         <div className="flex flex-col gap-1">
           <h2 className="tipo-titulo-seccion">{mode === 'create' ? 'Nuevo movimiento' : 'Editar movimiento'}</h2>
           <p className="tipo-secundario">
@@ -241,7 +389,7 @@ export function KardexEntryDialog({
               label="Tipo de movimiento"
               error={errors.movementTypeId?.message}
               disabled={loadingDetail}
-              {...register('movementTypeId')}
+              {...register('movementTypeId', { onChange: recalcTotal })}
             >
               {movementTypes.map((type) => (
                 <option key={type.id} value={type.id}>
@@ -250,26 +398,60 @@ export function KardexEntryDialog({
               ))}
             </Select>
 
-            {isIngreso && (
-              <div className={isDinero ? undefined : 'grid grid-cols-2 gap-4'}>
-                <Input label="Entrada — cantidad" type="number" disabled={loadingDetail} error={errors.entryQuantity?.message} {...register('entryQuantity')} />
-                {!isDinero && (
-                  <Controller
-                    control={control}
-                    name="entryKilos"
-                    render={({ field }) => (
-                      <FormattedNumberInput
-                        label="Entrada — kilos"
-                        disabled={loadingDetail}
-                        error={errors.entryKilos?.message}
-                        value={field.value}
-                        onChange={field.onChange}
-                        onBlur={field.onBlur}
-                      />
-                    )}
-                  />
+            {(isIngreso || isVenta) && (
+              <div className="grid grid-cols-2 gap-4">
+                {isIngreso ? (
+                  <Input label="Entrada — cantidad" type="number" disabled={loadingDetail} error={errors.entryQuantity?.message} {...register('entryQuantity')} />
+                ) : (
+                  <Input label="Salida — cantidad" type="number" disabled={loadingDetail} error={errors.exitQuantity?.message} {...register('exitQuantity')} />
                 )}
+                {isDinero ? (
+                  renderMoneyField('baseAmount', isIngreso ? 'Entrada — Bs.' : 'Salida — Bs.')
+                ) : (
+                  renderMoneyField(
+                    isIngreso ? 'entryKilos' : 'exitKilos',
+                    isIngreso ? 'Entrada — kilos' : 'Salida — kilos',
+                  )
+                )}
+                {/* Desbaste (kg, a mano) y peso neto: Ingreso y Venta en modo
+                    "kilo" (2026-11-08). El subtotal se calcula sobre el peso
+                    neto; el saldo de kilos sigue usando el peso total. */}
+                {!isDinero && (
+                  <>
+                    {renderMoneyField('shrinkageKilos', 'Desbaste kg')}
+                    <FormattedNumberInput
+                      label="Peso neto kg"
+                      value={netKilos.toFixed(2)}
+                      onChange={() => undefined}
+                      disabled
+                    />
+                  </>
+                )}
+                <FormattedNumberInput
+                  label={isDinero ? 'Monto promedio' : 'Peso promedio'}
+                  value={avgWeight}
+                  onChange={() => undefined}
+                  disabled
+                />
+                {/* En modo "dinero" no hay kilos: el precio por kilo se guarda
+                    solo como dato informativo, no entra en ningún cálculo
+                    (a pedido del usuario, 2026-10-26, para que ambos modos
+                    tengan el mismo formulario). */}
+                {renderMoneyField('pricePerKilo', 'Precio por kilo Bs.')}
               </div>
+            )}
+
+            {(isIngreso || isVenta) && (
+              <FormattedNumberInput
+                label={
+                  isDinero
+                    ? `Subtotal Bs. (= ${isIngreso ? 'Entrada' : 'Salida'} Bs.)`
+                    : 'Subtotal Bs. (peso neto × precio por kilo)'
+                }
+                value={subtotal.toFixed(2)}
+                onChange={() => undefined}
+                disabled
+              />
             )}
 
             {isBaja && (
@@ -292,55 +474,38 @@ export function KardexEntryDialog({
               </div>
             )}
 
-            {isVenta && (
-              <div className={isDinero ? undefined : 'grid grid-cols-2 gap-4'}>
-                <Input label="Salida — cantidad" type="number" disabled={loadingDetail} error={errors.exitQuantity?.message} {...register('exitQuantity')} />
-                {!isDinero && (
-                  <Controller
-                    control={control}
-                    name="exitKilos"
-                    render={({ field }) => (
-                      <FormattedNumberInput
-                        label="Salida — kilos"
-                        disabled={loadingDetail}
-                        error={errors.exitKilos?.message}
-                        value={field.value}
-                        onChange={field.onChange}
-                        onBlur={field.onBlur}
-                      />
-                    )}
-                  />
-                )}
+            {(isIngreso || isVenta) && (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                {renderMoneyField('commission', 'Comisión Bs.')}
+                {renderMoneyField('transport', 'Transporte Bs.')}
+                {renderMoneyField('otherExpenses', 'Otros gastos Bs.')}
               </div>
             )}
 
             {(isIngreso || isVenta) && (
-              <Input
-                label={isDinero ? 'Monto promedio (calculado)' : 'Peso promedio (calculado)'}
-                type="number"
-                step="0.01"
-                value={avgWeight}
+              <FormattedNumberInput
+                label={isDinero ? 'Total Bs. (monto + gastos)' : 'Total Bs. (subtotal + gastos)'}
+                error={errors.total?.message}
+                value={total}
+                onChange={() => undefined}
                 disabled
-                title={isDinero ? 'Total / cantidad — se calcula solo' : 'Kilos / cantidad — se calcula solo'}
               />
             )}
 
-            {(isIngreso || isVenta) && (
-              <Controller
-                control={control}
-                name="total"
-                render={({ field }) => (
-                  <FormattedNumberInput
-                    label="Total Bs."
-                    disabled={loadingDetail}
-                    error={errors.total?.message}
-                    value={field.value}
-                    onChange={field.onChange}
-                    onBlur={field.onBlur}
-                  />
-                )}
-              />
+            {/* Distribución de la ganancia de kilos (liquidación de venta,
+                2026-11-09): solo Venta en modo "kilo". Son datos para el
+                PDF — no cambian el Total Bs. ni el saldo. */}
+            {isVenta && !isDinero && (
+              <div className="flex flex-col gap-2 border-t pt-4" style={{ borderColor: 'var(--border-subtle)' }}>
+                <span className="tipo-label">Distribución (liquidación de venta)</span>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  {renderMoneyField('initialWeightPerHead', 'Peso inicial por cabeza kg')}
+                  {renderMoneyField('distributionCommission', 'Comisión Bs.')}
+                  {renderMoneyField('feedCost', 'Alimento Bs.')}
+                </div>
+              </div>
             )}
+
           </div>
 
           {error && <p className="tipo-error">{error}</p>}
