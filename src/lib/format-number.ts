@@ -11,6 +11,19 @@ export function formatNumber(value: number): string {
   return NUMBER_FORMAT.format(value);
 }
 
+/** Para MOSTRAR un número (tablas, PDFs, dashboard, campos calculados): 0 se
+ * muestra como "-" en vez de "0,00" (a pedido del usuario, 2026-11-10). No
+ * usar en un input editable: ahí el valor tiene que poder tipearse. */
+export function formatNumberOrDash(value: number): string {
+  return value === 0 ? '-' : formatNumber(value);
+}
+
+/** Igual que `formatNumberOrDash`, para conteos enteros (cabezas,
+ * cantidades) — sin decimales. */
+export function formatCountOrDash(value: number): string {
+  return value === 0 ? '-' : String(value);
+}
+
 /** Para mostrar un valor ya guardado (string numérico plano, ej. "36506.00")
  * con separador de miles — `''`/no numérico se muestra vacío, no "0,00" (no
  * inventar un valor que el usuario no cargó). */

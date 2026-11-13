@@ -29,7 +29,7 @@ import {
 } from '@/infrastructure/di/kardex.container';
 import { downloadKardexPdf } from '@/lib/kardex-pdf';
 import { downloadLiquidationPdf } from '@/lib/liquidation-pdf';
-import { formatNumber } from '@/lib/format-number';
+import { formatCountOrDash, formatNumberOrDash } from '@/lib/format-number';
 import { formatDate } from '@/lib/format-date';
 import { capitalize } from '@/lib/capitalize';
 
@@ -440,10 +440,10 @@ function KardexPageContent() {
           </h1>
           {investmentDetail && (
             <p className="tipo-secundario">
-              Saldo actual: {investorBalanceQuantity} cabezas ·{' '}
+              Saldo actual: {formatCountOrDash(investorBalanceQuantity)} cabezas ·{' '}
               {investmentDetail.investmentTypeName === 'dinero'
-                ? `${formatNumber(investorTotal)} Bs.`
-                : `${formatNumber(investorBalanceKilos)} kg`}
+                ? `${formatNumberOrDash(investorTotal)} Bs.`
+                : `${formatNumberOrDash(investorBalanceKilos)} kg`}
               {' · '}
               <span style={{ color: investorIsFinished ? 'var(--text-muted)' : 'var(--primary)' }}>
                 {investorIsFinished ? 'Terminada' : 'Activa'}
@@ -470,7 +470,7 @@ function KardexPageContent() {
             )}
             <Button type="button" variant="secondary" onClick={handleDownloadPdf} loading={downloadingPdf}>
               <Download className="h-4 w-4" strokeWidth={1.5} />
-              Descargar PDF
+              Descargar kardex
             </Button>
           </div>
         )}

@@ -2,7 +2,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import type { KardexEntryListItem } from '@/domain/kardex/kardex-entry.entity';
 import { formatDateOnly } from './format-date';
-import { formatNumber } from './format-number';
+import { formatCountOrDash, formatNumberOrDash } from './format-number';
 import { loadCompanyLogo } from './pdf-logo';
 
 export interface KardexPdfParams {
@@ -118,13 +118,13 @@ export async function downloadKardexPdf(params: KardexPdfParams): Promise<void> 
     return [
       formatDateOnly(entry.entryDate),
       entry.detail,
-      isBaja ? '' : formatNumber(entry.avgWeight),
-      isIngreso ? String(entry.entryQuantity) : '',
-      isIngreso ? formatNumber(isDinero ? entry.debe : entry.entryKilos) : '',
-      isBaja || isVenta ? String(entry.exitQuantity) : '',
-      isBaja ? formatNumber(entry.avgWeight) : isVenta ? formatNumber(isDinero ? entry.haber : entry.exitKilos) : '',
-      String(entry.runningBalanceQuantity),
-      formatNumber(isDinero ? entry.runningBalanceTotal : entry.runningBalanceKilos),
+      isBaja ? '-' : formatNumberOrDash(entry.avgWeight),
+      isIngreso ? formatCountOrDash(entry.entryQuantity) : '-',
+      isIngreso ? formatNumberOrDash(isDinero ? entry.debe : entry.entryKilos) : '-',
+      isBaja || isVenta ? formatCountOrDash(entry.exitQuantity) : '-',
+      isBaja ? formatNumberOrDash(entry.avgWeight) : isVenta ? formatNumberOrDash(isDinero ? entry.haber : entry.exitKilos) : '-',
+      formatCountOrDash(entry.runningBalanceQuantity),
+      formatNumberOrDash(isDinero ? entry.runningBalanceTotal : entry.runningBalanceKilos),
       '',
     ];
   });

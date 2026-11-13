@@ -14,6 +14,10 @@ interface FormattedNumberInputProps {
   value: string;
   onChange: (value: string) => void;
   onBlur?: () => void;
+  /** Para campos calculados de solo lectura: 0 se muestra como "-" (igual
+   * que en tablas y PDFs, ver `formatNumberOrDash`). Nunca en un campo
+   * editable — ahí el "0,00" tiene que poder reemplazarse tipeando. */
+  dashWhenZero?: boolean;
 }
 
 /**
@@ -26,7 +30,15 @@ interface FormattedNumberInputProps {
  * no pueden mostrar puntos de miles (el navegador los rechaza como
  * caracter inválido), por eso este componente controla el string a mano.
  */
-export function FormattedNumberInput({ label, error, disabled, value, onChange, onBlur }: FormattedNumberInputProps) {
+export function FormattedNumberInput({
+  label,
+  error,
+  disabled,
+  value,
+  onChange,
+  onBlur,
+  dashWhenZero = false,
+}: FormattedNumberInputProps) {
   const [isFocused, setIsFocused] = useState(false);
 
   return (
@@ -36,7 +48,7 @@ export function FormattedNumberInput({ label, error, disabled, value, onChange, 
       label={label}
       error={error}
       disabled={disabled}
-      value={isFocused ? value : formatDecimalInput(value)}
+      value={isFocused ? value : dashWhenZero && Number(value) === 0 ? '-' : formatDecimalInput(value)}
       onFocus={() => setIsFocused(true)}
       onBlur={() => {
         setIsFocused(false);

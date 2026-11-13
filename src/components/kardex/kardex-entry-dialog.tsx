@@ -32,10 +32,14 @@ const kardexEntrySchema = z.object({
   total: numberField('El total'),
   pricePerKilo: numberField('El precio por kilo'),
   shrinkageKilos: numberField('El desbaste'),
+  shrinkagePercent: numberField('El desbaste %'),
   initialWeightPerHead: numberField('El peso inicial por cabeza'),
   distributionCommission: numberField('La comisión de distribución'),
   feedCost: numberField('El alimento'),
+  transportDescription: z.string().max(255, 'Máximo 255 caracteres'),
+  otherExpensesDescription: z.string().max(255, 'Máximo 255 caracteres'),
   commission: numberField('La comisión'),
+  commissionPercent: numberField('La comisión %'),
   transport: numberField('El transporte'),
   otherExpenses: numberField('Otros gastos'),
   // Solo del formulario (modo "dinero"): el monto base antes de gastos. No
@@ -83,10 +87,14 @@ function toFormValues(entry: KardexEntry | null): KardexEntryFormData {
     total: entry ? entry.total.toFixed(2) : '0.00',
     pricePerKilo: entry ? entry.pricePerKilo.toFixed(2) : '0.00',
     shrinkageKilos: entry ? entry.shrinkageKilos.toFixed(2) : '0.00',
+    shrinkagePercent: entry ? entry.shrinkagePercent.toFixed(2) : '0.00',
     initialWeightPerHead: entry ? entry.initialWeightPerHead.toFixed(2) : '0.00',
     distributionCommission: entry ? entry.distributionCommission.toFixed(2) : '0.00',
     feedCost: entry ? entry.feedCost.toFixed(2) : '0.00',
+    transportDescription: entry?.transportDescription ?? '',
+    otherExpensesDescription: entry?.otherExpensesDescription ?? '',
     commission: entry ? entry.commission.toFixed(2) : '0.00',
+    commissionPercent: entry ? entry.commissionPercent.toFixed(2) : '0.00',
     transport: entry ? entry.transport.toFixed(2) : '0.00',
     otherExpenses: entry ? entry.otherExpenses.toFixed(2) : '0.00',
     baseAmount: entry ? (entry.total - expenses).toFixed(2) : '0.00',
@@ -97,6 +105,21 @@ function toNumber(value: string): number {
   const parsed = Number(value);
   return Number.isNaN(parsed) ? 0 : parsed;
 }
+
+function roundCents(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+/** Campos que, al cambiar, recalculan el desbaste en kg (= peso bruto × %). */
+const SHRINKAGE_DEPENDENCIES = new Set(['movementTypeId', 'entryKilos', 'exitKilos', 'shrinkagePercent']);
+/** Campos que, al cambiar, recalculan la comisión en Bs. (= subtotal × %) —
+ * todo lo que mueve el subtotal, más el propio %. */
+const COMMISSION_DEPENDENCIES = new Set([
+  ...SHRINKAGE_DEPENDENCIES,
+  'pricePerKilo',
+  'baseAmount',
+  'commissionPercent',
+]);
 
 /** Subtotal antes de gastos: kilos × precio por kilo (modo "kilo"; kilos de
  * Entrada en Ingreso, de Salida en Venta) o el monto tipeado (modo
@@ -234,6 +257,7 @@ export function KardexEntryDialog({
   const pricePerKilo = useWatch({ control, name: 'pricePerKilo' });
   const baseAmount = useWatch({ control, name: 'baseAmount' });
   const shrinkageKilos = useWatch({ control, name: 'shrinkageKilos' });
+  const commission = useWatch({ control, name: 'commission' });
   const netKilos = toNumber(isIngreso ? entryKilos : exitKilos) - toNumber(shrinkageKilos);
 
   // Total Bs. se recalcula SOLO cuando el usuario toca uno de los campos de
@@ -242,11 +266,31 @@ export function KardexEntryDialog({
   // queda exacto — el precio por kilo de los movimientos previos a
   // 2026-10-25 se reconstruyó redondeado (`total / kilos`), y recalcular
   // kilos × precio podría correrlo unos centavos.
-  function recalcTotal(): void {
+  //
+  // Desbaste y comisión se tipean en % (2026-11-11): desbaste kg = peso
+  // bruto × %, comisión Bs. = subtotal × %. Mismo criterio: cada uno se
+  // recalcula solo si cambió algo de lo que depende — el % de los
+  // movimientos viejos se completó redondeado (migración), y recalcular el
+  // kg/Bs. al tocar, por ejemplo, el transporte podría correrlos unos
+  // centavos.
+  function recalcTotal(changedField: string): void {
     const values = getValues();
     const typeName = movementTypes.find((type) => type.id === values.movementTypeId)?.name;
     if (typeName !== 'ingreso' && typeName !== 'venta') return;
-    setValue('total', computeTotal(values, isDinero, typeName === 'ingreso'));
+    const isIngresoType = typeName === 'ingreso';
+
+    if (SHRINKAGE_DEPENDENCIES.has(changedField)) {
+      const grossKilos = toNumber(isIngresoType ? values.entryKilos : values.exitKilos);
+      const shrinkage = isDinero ? 0 : roundCents((grossKilos * toNumber(values.shrinkagePercent)) / 100);
+      values.shrinkageKilos = shrinkage.toFixed(2);
+      setValue('shrinkageKilos', values.shrinkageKilos);
+    }
+    if (COMMISSION_DEPENDENCIES.has(changedField)) {
+      const subtotalValue = computeSubtotal(values, isDinero, isIngresoType);
+      values.commission = roundCents((subtotalValue * toNumber(values.commissionPercent)) / 100).toFixed(2);
+      setValue('commission', values.commission);
+    }
+    setValue('total', computeTotal(values, isDinero, isIngresoType));
   }
 
   const subtotal = computeSubtotal(
@@ -267,15 +311,17 @@ export function KardexEntryDialog({
   // nada que calcular (no pide ninguno de los dos), así que el campo sigue
   // siendo el `register` normal.
   // En modo "dinero" el promedio es Entrada/Salida Bs. / cantidad, SIN
-  // gastos (2026-10-26) — mismo criterio que el peso promedio en modo
-  // "kilo", que solo mira los kilos.
+  // gastos (2026-10-26). En modo "kilo" es el PESO NETO (kilos − desbaste)
+  // / cantidad (2026-11-09) — el kardex trabaja con el peso neto, igual que
+  // el saldo (`computeMovementDelta` del backend).
   useEffect(() => {
+    const netValue = String(netKilos);
     if (isIngreso) {
-      setValue('avgWeight', computeAverage(entryQuantity, isDinero ? baseAmount : entryKilos));
+      setValue('avgWeight', computeAverage(entryQuantity, isDinero ? baseAmount : netValue));
     } else if (isVenta) {
-      setValue('avgWeight', computeAverage(exitQuantity, isDinero ? baseAmount : exitKilos));
+      setValue('avgWeight', computeAverage(exitQuantity, isDinero ? baseAmount : netValue));
     }
-  }, [isIngreso, isVenta, isDinero, entryQuantity, entryKilos, exitQuantity, exitKilos, baseAmount, setValue]);
+  }, [isIngreso, isVenta, isDinero, entryQuantity, exitQuantity, netKilos, baseAmount, setValue]);
 
   async function submit(data: KardexEntryFormData): Promise<void> {
     // Baja no lleva precio ni gastos — se mandan en 0 aunque el formulario
@@ -285,9 +331,8 @@ export function KardexEntryDialog({
     const hasShrinkage = hasExpenses && !isDinero;
     // Distribución de la liquidación de venta: solo Venta en modo "kilo".
     const hasDistribution = isVenta && !isDinero;
-    const grossKilos = Number(isIngreso ? data.entryKilos : data.exitKilos);
-    if (hasShrinkage && Number(data.shrinkageKilos) > grossKilos) {
-      setError(`El desbaste no puede ser mayor que los kilos de ${isIngreso ? 'entrada' : 'salida'}`);
+    if ((hasShrinkage && Number(data.shrinkagePercent) > 100) || (hasExpenses && Number(data.commissionPercent) > 100)) {
+      setError('El desbaste y la comisión no pueden ser mayores a 100%');
       return;
     }
     setSaving(true);
@@ -306,10 +351,14 @@ export function KardexEntryDialog({
         total: Number(data.total),
         pricePerKilo: hasExpenses ? Number(data.pricePerKilo) : 0,
         shrinkageKilos: hasShrinkage ? Number(data.shrinkageKilos) : 0,
+        shrinkagePercent: hasShrinkage ? Number(data.shrinkagePercent) : 0,
         initialWeightPerHead: hasDistribution ? Number(data.initialWeightPerHead) : 0,
         distributionCommission: hasDistribution ? Number(data.distributionCommission) : 0,
         feedCost: hasDistribution ? Number(data.feedCost) : 0,
+        transportDescription: hasExpenses ? data.transportDescription.trim() : '',
+        otherExpensesDescription: hasExpenses ? data.otherExpensesDescription.trim() : '',
         commission: hasExpenses ? Number(data.commission) : 0,
+        commissionPercent: hasExpenses ? Number(data.commissionPercent) : 0,
         transport: hasExpenses ? Number(data.transport) : 0,
         otherExpenses: hasExpenses ? Number(data.otherExpenses) : 0,
       });
@@ -331,11 +380,11 @@ export function KardexEntryDialog({
       | 'entryKilos'
       | 'exitKilos'
       | 'pricePerKilo'
-      | 'shrinkageKilos'
+      | 'shrinkagePercent'
       | 'initialWeightPerHead'
       | 'distributionCommission'
       | 'feedCost'
-      | 'commission'
+      | 'commissionPercent'
       | 'transport'
       | 'otherExpenses',
     label: string,
@@ -353,7 +402,7 @@ export function KardexEntryDialog({
             value={field.value}
             onChange={(value) => {
               field.onChange(value);
-              recalcTotal();
+              recalcTotal(name);
             }}
             onBlur={field.onBlur}
           />
@@ -389,7 +438,7 @@ export function KardexEntryDialog({
               label="Tipo de movimiento"
               error={errors.movementTypeId?.message}
               disabled={loadingDetail}
-              {...register('movementTypeId', { onChange: recalcTotal })}
+              {...register('movementTypeId', { onChange: () => recalcTotal('movementTypeId') })}
             >
               {movementTypes.map((type) => (
                 <option key={type.id} value={type.id}>
@@ -410,28 +459,39 @@ export function KardexEntryDialog({
                 ) : (
                   renderMoneyField(
                     isIngreso ? 'entryKilos' : 'exitKilos',
-                    isIngreso ? 'Entrada — kilos' : 'Salida — kilos',
+                    // Ingreso y Venta son de la misma naturaleza: el dato que se
+                    // tipea es el peso bruto (antes del desbaste), 2026-11-10.
+                    'Peso bruto kg',
                   )
                 )}
-                {/* Desbaste (kg, a mano) y peso neto: Ingreso y Venta en modo
-                    "kilo" (2026-11-08). El subtotal se calcula sobre el peso
-                    neto; el saldo de kilos sigue usando el peso total. */}
+                {/* Desbaste y peso neto: Ingreso y Venta en modo "kilo". Se
+                    tipea el % del peso bruto (2026-11-11), los kg salen
+                    solos. El subtotal y el saldo usan el peso neto. */}
                 {!isDinero && (
-                  <>
-                    {renderMoneyField('shrinkageKilos', 'Desbaste kg')}
+                  <div className="col-span-2 grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    {renderMoneyField('shrinkagePercent', 'Desbaste %')}
+                    <FormattedNumberInput
+                      label="Desbaste kg"
+                      value={shrinkageKilos}
+                      onChange={() => undefined}
+                      disabled
+                      dashWhenZero
+                    />
                     <FormattedNumberInput
                       label="Peso neto kg"
                       value={netKilos.toFixed(2)}
                       onChange={() => undefined}
                       disabled
+                      dashWhenZero
                     />
-                  </>
+                  </div>
                 )}
                 <FormattedNumberInput
                   label={isDinero ? 'Monto promedio' : 'Peso promedio'}
                   value={avgWeight}
                   onChange={() => undefined}
                   disabled
+                  dashWhenZero
                 />
                 {/* En modo "dinero" no hay kilos: el precio por kilo se guarda
                     solo como dato informativo, no entra en ningún cálculo
@@ -451,6 +511,7 @@ export function KardexEntryDialog({
                 value={subtotal.toFixed(2)}
                 onChange={() => undefined}
                 disabled
+                dashWhenZero
               />
             )}
 
@@ -474,11 +535,44 @@ export function KardexEntryDialog({
               </div>
             )}
 
+            {/* Gastos (2026-11-10): Comisión sola, y Transporte / Otros gastos
+                cada uno con su descripción al lado — el texto de esa línea en
+                la liquidación de compra/venta (opcional: vacío = texto fijo
+                en el PDF). En celular, todo apilado. */}
             {(isIngreso || isVenta) && (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                {renderMoneyField('commission', 'Comisión Bs.')}
+                {/* Comisión: se tipea el % del subtotal (2026-11-11). */}
+                {renderMoneyField('commissionPercent', 'Comisión %')}
+                <FormattedNumberInput
+                  label="Comisión Bs."
+                  value={commission}
+                  onChange={() => undefined}
+                  disabled
+                  dashWhenZero
+                />
+                <div className="hidden sm:block" />
                 {renderMoneyField('transport', 'Transporte Bs.')}
+                <div className="sm:col-span-2">
+                  <Input
+                    label="Descripción del transporte"
+                    placeholder="Ej. Costo de transporte de los torillos a El Carmen Rivero Torres"
+                    maxLength={255}
+                    disabled={loadingDetail}
+                    error={errors.transportDescription?.message}
+                    {...register('transportDescription')}
+                  />
+                </div>
                 {renderMoneyField('otherExpenses', 'Otros gastos Bs.')}
+                <div className="sm:col-span-2">
+                  <Input
+                    label="Descripción de otros gastos"
+                    placeholder="Ej. Vacunas y marcado"
+                    maxLength={255}
+                    disabled={loadingDetail}
+                    error={errors.otherExpensesDescription?.message}
+                    {...register('otherExpensesDescription')}
+                  />
+                </div>
               </div>
             )}
 
@@ -489,6 +583,7 @@ export function KardexEntryDialog({
                 value={total}
                 onChange={() => undefined}
                 disabled
+                dashWhenZero
               />
             )}
 

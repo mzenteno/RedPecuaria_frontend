@@ -1,7 +1,7 @@
 import { FileText, Pencil, Trash2 } from 'lucide-react';
 import type { KardexEntryListItem } from '@/domain/kardex/kardex-entry.entity';
 import { formatDateOnly } from '@/lib/format-date';
-import { formatNumber } from '@/lib/format-number';
+import { formatCountOrDash, formatNumberOrDash } from '@/lib/format-number';
 import { capitalize } from '@/lib/capitalize';
 
 interface KardexTableProps {
@@ -130,7 +130,7 @@ export function KardexTable({
             <th colSpan={2} className="text-center">Saldo</th>
             <th rowSpan={2} className="text-right">Debe</th>
             <th rowSpan={2} className="text-right">Haber</th>
-            <th rowSpan={2} className="text-center">Acciones</th>
+            <th rowSpan={2}>Acciones</th>
           </tr>
           <tr>
             <th className="text-right">Cant.</th>
@@ -151,39 +151,29 @@ export function KardexTable({
               <td>{formatDateOnly(entry.entryDate)}</td>
               <td>{entry.detail}</td>
               <td>{capitalize(entry.movementTypeName)}</td>
-              <td className="text-right">{isBaja ? '' : formatNumber(entry.avgWeight)}</td>
-              <td className="text-right">{isIngreso ? entry.entryQuantity : ''}</td>
+              <td className="text-right">{isBaja ? '-' : formatNumberOrDash(entry.avgWeight)}</td>
+              <td className="text-right">{isIngreso ? formatCountOrDash(entry.entryQuantity) : '-'}</td>
               <td className="text-right">
-                {isIngreso ? formatNumber(isDinero ? entry.debe : entry.entryKilos) : ''}
+                {isIngreso ? formatNumberOrDash(isDinero ? entry.debe : entry.entryKilos) : '-'}
               </td>
-              <td className="text-right">{isVenta || isBaja ? entry.exitQuantity : ''}</td>
+              <td className="text-right">{isVenta || isBaja ? formatCountOrDash(entry.exitQuantity) : '-'}</td>
               <td className="text-right">
                 {isBaja
-                  ? formatNumber(entry.avgWeight)
+                  ? formatNumberOrDash(entry.avgWeight)
                   : isVenta
-                    ? formatNumber(isDinero ? entry.haber : entry.exitKilos)
-                    : ''}
+                    ? formatNumberOrDash(isDinero ? entry.haber : entry.exitKilos)
+                    : '-'}
               </td>
-              <td className="text-right">{entry.runningBalanceQuantity}</td>
+              <td className="text-right">{formatCountOrDash(entry.runningBalanceQuantity)}</td>
               <td className="text-right">
-                {formatNumber(isDinero ? entry.runningBalanceTotal : entry.runningBalanceKilos)}
+                {formatNumberOrDash(isDinero ? entry.runningBalanceTotal : entry.runningBalanceKilos)}
               </td>
-              <td className="text-right">{isIngreso ? formatNumber(entry.debe) : ''}</td>
-              <td className="text-right">{isVenta || (isBaja && isDinero) ? formatNumber(entry.haber) : ''}</td>
+              <td className="text-right">{isIngreso ? formatNumberOrDash(entry.debe) : '-'}</td>
+              <td className="text-right">{isVenta || (isBaja && isDinero) ? formatNumberOrDash(entry.haber) : '-'}</td>
               <td>
-                <div className="flex items-center justify-center gap-1">
-                  {(isIngreso || isVenta) && (
-                    <button
-                      type="button"
-                      onClick={() => onLiquidation(entry)}
-                      disabled={generatingLiquidationId === entry.id}
-                      className="data-action-btn disabled:opacity-40"
-                      aria-label={isIngreso ? 'Liquidación de compra' : 'Liquidación de venta'}
-                      title={isIngreso ? 'Liquidación de compra (PDF)' : 'Liquidación de venta (PDF)'}
-                    >
-                      <FileText className="h-5 w-5" strokeWidth={1.5} />
-                    </button>
-                  )}
+                {/* Alineados a la izquierda: así Editar/Eliminar quedan en columna en
+                    todas las filas, tengan o no el ícono de liquidación. */}
+                <div className="flex items-center justify-start gap-1">
                   {canEdit && (
                     <button
                       type="button"
@@ -204,6 +194,18 @@ export function KardexTable({
                       <Trash2 className="h-5 w-5" strokeWidth={1.5} />
                     </button>
                   )}
+                  {(isIngreso || isVenta) && (
+                    <button
+                      type="button"
+                      onClick={() => onLiquidation(entry)}
+                      disabled={generatingLiquidationId === entry.id}
+                      className="data-action-btn disabled:opacity-40"
+                      aria-label={isIngreso ? 'Liquidación de compra' : 'Liquidación de venta'}
+                      title={isIngreso ? 'Liquidación de compra (PDF)' : 'Liquidación de venta (PDF)'}
+                    >
+                      <FileText className="h-5 w-5" strokeWidth={1.5} />
+                    </button>
+                  )}
                 </div>
               </td>
             </tr>
@@ -222,15 +224,15 @@ export function KardexTable({
             <td className="font-semibold">TOTAL</td>
             <td></td>
             <td></td>
-            <td></td>
-            <td></td>
-            <td></td>
-            <td></td>
-            <td></td>
-            <td></td>
-            <td></td>
-            <td className="text-right font-semibold">{formatNumber(totalDebe)}</td>
-            <td className="text-right font-semibold">{formatNumber(totalHaber)}</td>
+            {/* Columnas numéricas sin total: "-", igual que las celdas que no
+                aplican a un tipo de movimiento (2026-11-10). */}
+            {Array.from({ length: 7 }, (_, i) => (
+              <td key={i} className="text-right">
+                -
+              </td>
+            ))}
+            <td className="text-right font-semibold">{formatNumberOrDash(totalDebe)}</td>
+            <td className="text-right font-semibold">{formatNumberOrDash(totalHaber)}</td>
             <td />
           </tr>
         </tfoot>

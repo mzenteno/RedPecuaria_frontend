@@ -2,7 +2,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import type { KardexEntry } from '@/domain/kardex/kardex-entry.entity';
 import { formatDateOnly } from './format-date';
-import { formatNumber } from './format-number';
+import { formatCountOrDash, formatNumber, formatNumberOrDash } from './format-number';
 import { loadCompanyLogo } from './pdf-logo';
 
 export type LiquidationKind = 'compra' | 'venta';
@@ -30,10 +30,6 @@ const LOGO_Y = 20;
 const BLACK: [number, number, number] = [0, 0, 0];
 const WHITE: [number, number, number] = [255, 255, 255];
 
-/** 0 → "-" (como en la planilla de referencia, ej. "Comisión -"). */
-function formatOrDash(value: number): string {
-  return value === 0 ? '-' : formatNumber(value);
-}
 
 /**
  * Liquidación de compra (Ingreso) o de venta (Venta) de UN movimiento del
@@ -44,8 +40,8 @@ function formatOrDash(value: number): string {
  *   sirve igual para ambos modos y para movimientos previos a los gastos.
  * - "Total Bs." de la tabla = monto + comisión; "Líquido pagable" = total
  *   del movimiento (con transporte y otros gastos).
- * - "Desb. 5%" = desbaste en kg (tipeado a mano en Ingreso/Venta desde
- *   2026-11-08; "-" si es 0). "Peso net" = peso tot − desbaste, y el
+ * - "Desb. X%" = desbaste en kg ("-" si es 0); desde 2026-11-11 el usuario
+ *   tipea el % y el encabezado lo muestra. Igual "Comisión X%". "Peso net" = peso tot − desbaste, y el
  *   peso promedio se calcula sobre el peso neto. Antes de existir el dato iba
  *   siempre "-" y
  *   "Peso net" = "Peso tot".
@@ -114,33 +110,47 @@ export async function downloadLiquidationPdf(params: LiquidationPdfParams): Prom
     ...tableStyles,
     startY: 128,
     margin: { left: MARGIN_X, right: MARGIN_X },
-    head: [['FECHA', 'DETALLE', 'CANT', 'PESO TOT', 'DESB 5%', 'PESO NET', 'PRECIO', 'MONTO', 'COMISIÓN', 'TOTAL BS']],
+    // El % real de cada movimiento en el encabezado (2026-11-11).
+    head: [
+      [
+        'FECHA',
+        'DETALLE',
+        'CANT',
+        'PESO TOT',
+        entry.shrinkagePercent > 0 ? `DESB ${formatPercent(entry.shrinkagePercent)}` : 'DESB',
+        'PESO NET',
+        'PRECIO',
+        'MONTO',
+        entry.commissionPercent > 0 ? `COMISIÓN ${formatPercent(entry.commissionPercent)}` : 'COMISIÓN',
+        'TOTAL BS',
+      ],
+    ],
     body: [
       [
         formatDateOnly(entry.entryDate),
         entry.detail,
-        String(quantity),
-        formatOrDash(kilos),
-        formatOrDash(shrinkage),
-        formatOrDash(netKilos),
-        formatOrDash(entry.pricePerKilo),
-        formatNumber(amount),
-        formatOrDash(entry.commission),
-        formatNumber(tableTotal),
+        formatCountOrDash(quantity),
+        formatNumberOrDash(kilos),
+        formatNumberOrDash(shrinkage),
+        formatNumberOrDash(netKilos),
+        formatNumberOrDash(entry.pricePerKilo),
+        formatNumberOrDash(amount),
+        formatNumberOrDash(entry.commission),
+        formatNumberOrDash(tableTotal),
       ],
     ],
     foot: [
       [
         '',
         '',
-        String(quantity),
+        formatCountOrDash(quantity),
         '',
         '',
-        formatOrDash(netKilos),
-        formatOrDash(entry.pricePerKilo),
-        formatNumber(amount),
+        formatNumberOrDash(netKilos),
+        formatNumberOrDash(entry.pricePerKilo),
+        formatNumberOrDash(amount),
         '',
-        formatNumber(tableTotal),
+        formatNumberOrDash(tableTotal),
       ],
     ],
     columnStyles: {
@@ -176,21 +186,27 @@ export async function downloadLiquidationPdf(params: LiquidationPdfParams): Prom
   if (netKilos > 0 && quantity > 0) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
-    doc.text(`Peso promedio: ${formatNumber(netKilos / quantity)} Kg.`, centerX, y, { align: 'center' });
+    doc.text(`Peso promedio: ${formatNumberOrDash(netKilos / quantity)} Kg.`, centerX, y, { align: 'center' });
     y += 24;
   }
 
   // Gastos que no van en la tabla (solo los que tengan monto).
   doc.setFontSize(10);
   const extraLines: [string, number][] = [
-    ['Costo de transporte', entry.transport],
-    ['Otros gastos', entry.otherExpenses],
+    // Texto que tipeó el usuario en el movimiento (2026-11-10); vacío =
+    // texto fijo.
+    [entry.transportDescription.trim() || 'Costo de transporte', entry.transport],
+    [entry.otherExpensesDescription.trim() || 'Otros gastos', entry.otherExpenses],
   ];
+  // El texto puede ser largo (hasta 255 caracteres): se parte en renglones
+  // para no pisar el monto de la derecha.
+  const labelMaxWidth = rightX - MARGIN_X - 140;
   for (const [label, value] of extraLines) {
     if (value === 0) continue;
-    doc.text(label, MARGIN_X, y);
-    doc.text(`${formatNumber(value)}  Bs.`, rightX, y, { align: 'right' });
-    y += 20;
+    const labelLines = doc.splitTextToSize(label, labelMaxWidth) as string[];
+    doc.text(labelLines, MARGIN_X, y);
+    doc.text(`${formatNumberOrDash(value)}  Bs.`, rightX, y, { align: 'right' });
+    y += 20 + (labelLines.length - 1) * 12;
   }
 
   // Líquido pagable — recuadro de borde grueso en la mitad derecha.
@@ -203,14 +219,14 @@ export async function downloadLiquidationPdf(params: LiquidationPdfParams): Prom
   doc.setFontSize(13);
   const boxTextY = y + boxHeight / 2 + 4.5;
   doc.text('LÍQUIDO PAGABLE', boxX + (rightX - boxX) * 0.35, boxTextY, { align: 'center' });
-  doc.text(`${formatNumber(entry.total)}  Bs.`, rightX - 8, boxTextY, { align: 'right' });
+  doc.text(`${formatNumberOrDash(entry.total)}  Bs.`, rightX - 8, boxTextY, { align: 'right' });
   y += boxHeight;
 
   // Costo/ingreso por cabeza, debajo del recuadro.
   if (quantity > 0) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
-    doc.text(`${formatNumber(entry.total / quantity)} Bs.`, rightX - 8, y + 12, { align: 'right' });
+    doc.text(`${formatNumberOrDash(entry.total / quantity)} Bs.`, rightX - 8, y + 12, { align: 'right' });
   }
 
   if (!isCompra) {
@@ -269,7 +285,7 @@ function drawSaleDistribution(
   data: SaleDistribution,
 ): void {
   const { quantity, netKilos, initialWeightPerHead, sharePercent, price, distributionCommission, feedCost } = data;
-  const perHead = (value: number) => (quantity > 0 ? formatNumber(value / quantity) : '');
+  const perHead = (value: number) => (quantity > 0 ? formatNumberOrDash(value / quantity) : '');
 
   const hasInitialWeight = initialWeightPerHead > 0;
   const returnedKilos = initialWeightPerHead * quantity;
@@ -294,15 +310,15 @@ function drawSaleDistribution(
   doc.line(unitX - doc.getTextWidth('Unitario'), y + 2, unitX, y + 2);
 
   const rows: [string, string, string][] = [
-    ['Peso neto de venta', formatNumber(netKilos), perHead(netKilos)],
+    ['Peso neto de venta', formatNumberOrDash(netKilos), perHead(netKilos)],
     [
       'Devolución de kilos al inversionista',
-      hasInitialWeight ? formatNumber(returnedKilos) : '',
-      hasInitialWeight ? formatNumber(initialWeightPerHead) : '',
+      hasInitialWeight ? formatNumberOrDash(returnedKilos) : '',
+      hasInitialWeight ? formatNumberOrDash(initialWeightPerHead) : '',
     ],
     [
       'Ganancia de kilos en la propiedad',
-      hasInitialWeight ? formatNumber(gainKilos) : '',
+      hasInitialWeight ? formatNumberOrDash(gainKilos) : '',
       hasInitialWeight ? perHead(gainKilos) : '',
     ],
   ];
@@ -320,7 +336,7 @@ function drawSaleDistribution(
   // (Total y Unitario), como la planilla.
   doc.line(totalX - 70, y - 11, unitX, y - 11);
 
-  const dashOrBlank = (value: number) => formatOrDash(value);
+  const dashOrBlank = (value: number) => formatNumberOrDash(value);
   autoTable(doc, {
     ...tableStyles,
     startY: y + 22,
@@ -331,18 +347,18 @@ function drawSaleDistribution(
       [
         'Inversionista',
         sharePercent !== null ? formatPercent(sharePercent) : '',
-        canSplit ? formatNumber(investorGain) : '',
-        canSplit ? formatNumber(investorTotalKilos) : '',
+        canSplit ? formatNumberOrDash(investorGain) : '',
+        canSplit ? formatNumberOrDash(investorTotalKilos) : '',
         dashOrBlank(price),
         dashOrBlank(distributionCommission),
         dashOrBlank(feedCost),
-        canSplit ? formatNumber(investorTotalBs) : '',
+        canSplit ? formatNumberOrDash(investorTotalBs) : '',
       ],
       ['', '', '', '', '', '', '', ''],
       [
         'Propiedad',
         sharePercent !== null ? formatPercent(100 - sharePercent) : '',
-        canSplit ? formatNumber(propertyGain) : '',
+        canSplit ? formatNumberOrDash(propertyGain) : '',
         '',
         dashOrBlank(price),
         '-',

@@ -22,10 +22,13 @@ export interface KardexEntry {
   /** Bs. por kilo — solo Ingreso/Venta en inversiones "por kilo" (0 en el
    * resto). Subtotal = kilos × este precio. */
   pricePerKilo: number;
-  /** Desbaste en kg — solo Ingreso en modo "kilo" (0 en el resto). Se
-   * descuenta de `entryKilos` solo para el subtotal (peso neto × precio); el
-   * saldo de kilos usa `entryKilos` completo. */
+  /** Desbaste en kg — Ingreso y Venta en modo "kilo" (0 en el resto). Se
+   * descuenta del peso bruto (`entryKilos`/`exitKilos`) para el peso neto,
+   * que usan el subtotal y el saldo. Desde 2026-11-11 se calcula con
+   * `shrinkagePercent` (peso bruto × % / 100). */
   shrinkageKilos: number;
+  /** Desbaste en % del peso bruto — lo que tipea el usuario. */
+  shrinkagePercent: number;
   /** Solo Venta en modo "kilo" — distribución de la liquidación de venta
    * (no entran en `total` ni en el saldo): peso con el que entró cada animal
    * (kg) y la comisión/alimento que se descuentan de lo que cobra el
@@ -33,9 +36,16 @@ export interface KardexEntry {
   initialWeightPerHead: number;
   distributionCommission: number;
   feedCost: number;
+  /** Texto de las líneas de Transporte/Otros gastos en la liquidación de
+   * compra/venta. Vacío = el PDF usa "Costo de transporte"/"Otros gastos". */
+  transportDescription: string;
+  otherExpensesDescription: string;
   /** Gastos de Ingreso/Venta, ya sumados en `total` (0 en Baja). Solo se
    * muestran en el diálogo del movimiento, no en la tabla ni en el PDF. */
   commission: number;
+  /** Comisión en % del subtotal — lo que tipea el usuario; `commission` es
+   * el resultado en Bs. (subtotal × % / 100), desde 2026-11-11. */
+  commissionPercent: number;
   transport: number;
   otherExpenses: number;
   createdAt: string;

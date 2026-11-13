@@ -6,12 +6,8 @@ import { useIsInvestor } from '@/hooks/menu/use-is-investor';
 import { useInvestorDashboard } from '@/hooks/dashboard/use-investor-dashboard';
 import { useAdminDashboard } from '@/hooks/dashboard/use-admin-dashboard';
 import { formatDateOnly } from '@/lib/format-date';
+import { formatCountOrDash, formatNumberOrDash } from '@/lib/format-number';
 
-const NUMBER_FORMAT = new Intl.NumberFormat('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-function formatNumber(value: number): string {
-  return NUMBER_FORMAT.format(value);
-}
 
 interface KpiCardProps {
   label: string;
@@ -66,12 +62,12 @@ function InvestorDashboard() {
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <KpiCard
           label="Inversiones activas"
-          value={String(investmentsCount)}
+          value={formatCountOrDash(investmentsCount)}
           icon={<TrendingUp className="h-5 w-5" strokeWidth={1.5} />}
         />
         <KpiCard
           label="Total recibido en ventas"
-          value={formatNumber(totalSalesReceived)}
+          value={formatNumberOrDash(totalSalesReceived)}
           icon={<Banknote className="h-5 w-5" strokeWidth={1.5} />}
         />
       </div>
@@ -105,8 +101,8 @@ function InvestorDashboard() {
                     <td>{investment.propertyName}</td>
                     <td>{investment.gestion}</td>
                     <td>{investment.description}</td>
-                    <td className="text-right tabular-nums">{investment.currentBalanceQuantity}</td>
-                    <td className="text-right tabular-nums">{formatNumber(investment.currentBalanceKilos)}</td>
+                    <td className="text-right tabular-nums">{formatCountOrDash(investment.currentBalanceQuantity)}</td>
+                    <td className="text-right tabular-nums">{formatNumberOrDash(investment.currentBalanceKilos)}</td>
                   </tr>
                 ))}
               {!isLoading && investments.length === 0 && (
@@ -140,22 +136,22 @@ function AdminDashboard() {
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <KpiCard
           label="Propiedades activas"
-          value={String(propertiesCount)}
+          value={formatCountOrDash(propertiesCount)}
           icon={<MapPin className="h-5 w-5" strokeWidth={1.5} />}
         />
         <KpiCard
           label="Inversiones activas"
-          value={String(activeInvestmentsCount)}
+          value={formatCountOrDash(activeInvestmentsCount)}
           icon={<TrendingUp className="h-5 w-5" strokeWidth={1.5} />}
         />
         <KpiCard
           label="Inversionistas"
-          value={String(investorsCount)}
+          value={formatCountOrDash(investorsCount)}
           icon={<Users className="h-5 w-5" strokeWidth={1.5} />}
         />
         <KpiCard
           label="Total en ventas"
-          value={formatNumber(totalSalesAmount)}
+          value={formatNumberOrDash(totalSalesAmount)}
           icon={<Banknote className="h-5 w-5" strokeWidth={1.5} />}
         />
       </div>
@@ -186,7 +182,7 @@ function AdminDashboard() {
                       <div className="mb-1 flex items-center justify-between gap-2">
                         <span className="tipo-normal truncate font-medium">{investor.fullName}</span>
                         <span className="tipo-normal shrink-0 tabular-nums">
-                          {formatNumber(investor.totalSalesReceived)}
+                          {formatNumberOrDash(investor.totalSalesReceived)}
                         </span>
                       </div>
                       <div className="h-1.5 w-full" style={{ background: 'var(--border-subtle)' }}>
@@ -236,7 +232,7 @@ function AdminDashboard() {
                         {movement.propertyName} / {movement.investmentDescription}
                       </td>
                       <td>{movement.detail}</td>
-                      <td className="text-right tabular-nums">{formatNumber(movement.total)}</td>
+                      <td className="text-right tabular-nums">{formatNumberOrDash(movement.total)}</td>
                     </tr>
                   ))}
                 {!isLoading && recentMovements.length === 0 && (
